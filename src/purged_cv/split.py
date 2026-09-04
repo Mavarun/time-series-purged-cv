@@ -8,39 +8,29 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import BaseCrossValidator
 
-
-def _purge_and_embargo(train_indices, test_indices, starts, ends, embargo_td):
-    """Inline purge (+ optional embargo) used before helpers are extracted."""
-    train_indices = np.asarray(train_indices, dtype=int)
-    test_indices = np.asarray(test_indices, dtype=int)
-    if len(train_indices) == 0 or len(test_indices) == 0:
-        return train_indices
-    test_starts = starts.iloc[test_indices]
-    test_ends = ends.iloc[test_indices]
-    test_start_min = test_starts.min()
-    test_end_max = test_ends.max()
-    kept = []
-    for idx in train_indices:
-        t0, t1 = starts.iloc[idx], ends.iloc[idx]
-        if t1 < test_start_min or t0 > test_end_max:
-            kept.append(int(idx))
-            continue
-        if not bool(((t0 <= test_ends) & (test_starts <= t1)).any()):
-            kept.append(int(idx))
-    purged = np.asarray(kept, dtype=int)
-    if embargo_td is None or embargo_td == 0:
-        return purged
-    if isinstance(embargo_td, (int, float, np.integer, np.floating)):
-        embargo_stop = test_end_max + embargo_td
-    else:
-        embargo_stop = test_end_max + pd.Timedelta(embargo_td)
-    starts_tr = starts.iloc[purged]
-    mask = ~((starts_tr > test_end_max) & (starts_tr <= embargo_stop))
-    return np.asarray(purged[np.asarray(mask)], dtype=int)
+from purged_cv.embargo import apply_purge_and_embargo
 
 
 class PurgedKFold(BaseCrossValidator):
-    """K-Fold over contiguous time folds with purge (+ optional embargo)."""
+    """K-Fold over contiguous time folds with purge (+ optional embargo).
+
+    Test folds are contiguous blocks along the sample order (time order).
+    Training indices whose label intervals overlap the test fold are purged.
+    An optional embargo window after each test fold is also removed from train.
+
+    Parameters
+    ----------
+    n_splits :
+        Number of folds.
+    label_start_times, label_end_times :
+        Per-sample label interval. Length must match n_samples at split time.
+        May be integer bar indices or datetimes.
+    embargo_pct :
+        Fraction of the full sample span used as embargo length after each
+        test fold. 0 disables embargo. For integer times, embargo bars =
+        ceil(embargo_pct * n_samples). For datetime, embargo =
+        embargo_pct * (max_end - min_start).
+    """
 
     def __init__(
         self,
@@ -83,24 +73,34 @@ class PurgedKFold(BaseCrossValidator):
         ):
             span = ends.max() - starts.min()
             return pd.Timedelta(span) * float(self.embargo_pct)
+        # ordinal / integer bars
         return int(np.ceil(self.embargo_pct * n_samples))
 
-    def split(self, X, y=None, groups=None) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    def split(
+        self, X, y=None, groups=None
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         n_samples = X.shape[0] if hasattr(X, "shape") else len(X)
         if n_samples < self.n_splits:
             raise ValueError("Not enough samples for the requested n_splits")
+
         starts, ends = self._resolve_times(n_samples)
         embargo_td = self._embargo_td(starts, ends, n_samples)
+
         fold_sizes = np.full(self.n_splits, n_samples // self.n_splits, dtype=int)
         fold_sizes[: n_samples % self.n_splits] += 1
         boundaries = np.cumsum(fold_sizes)
+
         all_idx = np.arange(n_samples)
         prev = 0
         for end in boundaries:
             test_indices = all_idx[prev:end]
             train_indices = np.concatenate([all_idx[:prev], all_idx[end:]])
-            train_indices = _purge_and_embargo(
-                train_indices, test_indices, starts, ends, embargo_td
+            train_indices = apply_purge_and_embargo(
+                train_indices,
+                test_indices,
+                starts,
+                ends,
+                embargo_td=embargo_td,
             )
             yield train_indices, test_indices
             prev = end
