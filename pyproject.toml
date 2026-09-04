@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "time-series-purged-cv"
+version = "0.1.0"
+description = "Research slice: purged and embargoed time-series CV vs naive KFold on overlapping financial labels."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "M.Varun", email = "116015799+Mavarun@users.noreply.github.com" }]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "statsmodels",
+    "yfinance",
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
