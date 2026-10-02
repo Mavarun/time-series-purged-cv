@@ -23,12 +23,14 @@ samples outside the block, and it is vectorised.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from itertools import combinations
 from math import comb
 from typing import Iterator
 
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.model_selection import BaseCrossValidator
 
 from purged_cv.embargo import embargo_size
@@ -160,3 +162,100 @@ class CombinatorialPurgedKFold(BaseCrossValidator):
     def split(self, X, y=None, groups=None) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         for train_idx, test_idx, _ in self.split_with_groups(X, y, groups):
             yield train_idx, test_idx
+
+
+# ---------------------------------------------------------------------------
+# Backtest-path assembly
+# ---------------------------------------------------------------------------
+
+
+def cpcv_path_map(cv: CombinatorialPurgedKFold) -> np.ndarray:
+    """Assign splits to backtest paths.
+
+    Returns an integer array of shape ``(n_paths, n_groups)`` whose entry
+    ``[p, g]`` is the index of the split whose OOS predictions fill group
+    ``g`` on path ``p``. Group ``g`` is tested in exactly ``n_paths`` splits;
+    the ``j``-th of them (in split order) is used on path ``j`` (AFML 12.4).
+    """
+    combos = cv.test_group_combinations()
+    out = np.full((cv.n_paths, cv.n_groups), -1, dtype=int)
+    for g in range(cv.n_groups):
+        using = [i for i, tg in enumerate(combos) if g in tg]
+        out[:, g] = using
+    return out
+
+
+@dataclass
+class CPCVPaths:
+    """OOS predictions on every CPCV backtest path.
+
+    Attributes
+    ----------
+    predictions :
+        ``(n_paths, n_samples)``; row ``p`` is a complete out-of-sample
+        prediction series assembled from the splits in ``path_map[p]``.
+    path_map :
+        ``(n_paths, n_groups)`` split index used for each (path, group).
+    group_bounds :
+        Half-open sample bounds of each group.
+    """
+
+    predictions: np.ndarray
+    path_map: np.ndarray
+    group_bounds: list[tuple[int, int]]
+
+    @property
+    def n_paths(self) -> int:
+        return int(self.predictions.shape[0])
+
+
+def cpcv_oos_predictions(
+    estimator,
+    X: np.ndarray,
+    y: np.ndarray,
+    cv: CombinatorialPurgedKFold,
+    *,
+    method: str = "predict",
+    sample_weight: np.ndarray | None = None,
+    sample_weight_param: str = "clf__sample_weight",
+) -> CPCVPaths:
+    """Fit one clone per CPCV split and assemble ``n_paths`` OOS series.
+
+    ``method`` may be ``"predict"``, ``"predict_proba"`` (positive-class
+    column) or ``"decision_function"``. Every value on every path comes from
+    a model whose (purged, embargoed) training set excluded that sample.
+    """
+    X = np.asarray(X)
+    y = np.asarray(y)
+    n = X.shape[0]
+    bounds = cv.group_bounds(n)
+    path_map = cpcv_path_map(cv)
+    preds = np.full((cv.n_paths, n), np.nan, dtype=float)
+
+    for split_id, (train, test, groups) in enumerate(cv.split_with_groups(X, y)):
+        if len(train) == 0:
+            raise ValueError(f"split {split_id} has an empty training set")
+        model = clone(estimator)
+        fit_kwargs = {}
+        if sample_weight is not None:
+            fit_kwargs[sample_weight_param] = np.asarray(sample_weight)[train]
+        model.fit(X[train], y[train], **fit_kwargs)
+        out = getattr(model, method)(X[test])
+        if method == "predict_proba":
+            out = out[:, 1]
+        values = np.full(n, np.nan)
+        values[test] = np.asarray(out, dtype=float)
+        for g in groups:
+            a, b = bounds[g]
+            path = int(np.flatnonzero(path_map[:, g] == split_id)[0])
+            preds[path, a:b] = values[a:b]
+
+    if np.isnan(preds).any():  # pragma: no cover - guarded by path_map design
+        raise RuntimeError("incomplete CPCV path assembly")
+    return CPCVPaths(predictions=preds, path_map=path_map, group_bounds=bounds)
+
+
+def path_accuracies(paths: CPCVPaths, y: np.ndarray) -> np.ndarray:
+    """Accuracy of each assembled path (hard-label predictions)."""
+    y = np.asarray(y)
+    return (paths.predictions == y[None, :]).mean(axis=1)
