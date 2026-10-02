@@ -124,14 +124,25 @@ class SelectionReport:
 
 
 def deflated_sharpe_for_selection(
-    trial_returns: np.ndarray, periods_per_year: float = 252.0
+    trial_returns: np.ndarray,
+    periods_per_year: float = 252.0,
+    sr_variance: str = "cross_sectional",
 ) -> SelectionReport:
     """Select the max-Sharpe trial and deflate it by the number of trials.
 
-    ``trials_sr_variance`` is the cross-sectional variance of the trials'
-    per-period Sharpes; skew/kurtosis come from the selected return series.
-    Treats trials as independent - correlated trials overstate N, which makes
-    the deflation conservative.
+    ``sr_variance`` chooses the variance used in E[max SR]:
+
+    * ``"cross_sectional"`` (Bailey & López de Prado 2014): sample variance of
+      the trials' per-period Sharpes. Appropriate when trials are a broad
+      search over unrelated ideas. If the grid contains a genuine edge *and*
+      its mirror image (e.g. long/short versions of one rule), that dispersion
+      is real skill, not luck, and this choice over-deflates sharply.
+    * ``"null"``: sampling variance of a zero-skill Sharpe estimate,
+      ``1 / (T - 1)``. Asks "could the best of N skill-less trials look this
+      good?" without letting real dispersion inflate the hurdle.
+
+    Skew/kurtosis come from the selected series. Trials are treated as
+    independent; correlated trials overstate N, which is conservative.
     """
     M = np.asarray(trial_returns, dtype=float)
     if M.ndim != 2 or M.shape[1] < 2:
@@ -141,8 +152,13 @@ def deflated_sharpe_for_selection(
     r = M[:, b]
     g3 = float(_skew(r))
     g4 = float(_kurt(r, fisher=False))
-    var_sr = float(srs.var(ddof=1))
     n = M.shape[0]
+    if sr_variance == "cross_sectional":
+        var_sr = float(srs.var(ddof=1))
+    elif sr_variance == "null":
+        var_sr = 1.0 / (n - 1.0)
+    else:
+        raise ValueError("sr_variance must be 'cross_sectional' or 'null'")
     return SelectionReport(
         best_index=b,
         n_trials=M.shape[1],
