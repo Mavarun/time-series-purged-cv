@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import BaseCrossValidator
 
-from purged_cv.embargo import apply_purge_and_embargo
+from purged_cv.embargo import apply_purge_and_embargo, embargo_size
 
 
 class PurgedKFold(BaseCrossValidator):
@@ -66,15 +66,7 @@ class PurgedKFold(BaseCrossValidator):
         return starts, ends
 
     def _embargo_td(self, starts: pd.Series, ends: pd.Series, n_samples: int):
-        if self.embargo_pct <= 0:
-            return 0
-        if np.issubdtype(starts.dtype, np.datetime64) or isinstance(
-            starts.iloc[0], (pd.Timestamp, np.datetime64)
-        ):
-            span = ends.max() - starts.min()
-            return pd.Timedelta(span) * float(self.embargo_pct)
-        # ordinal / integer bars
-        return int(np.ceil(self.embargo_pct * n_samples))
+        return embargo_size(starts, ends, n_samples, self.embargo_pct)
 
     def split(
         self, X, y=None, groups=None
