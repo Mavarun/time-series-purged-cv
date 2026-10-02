@@ -101,6 +101,30 @@ def embargo_train_indices_with_starts(
     return np.asarray(train_indices[np.asarray(mask)], dtype=int)
 
 
+def embargo_size(
+    label_start_times: pd.Series,
+    label_end_times: pd.Series,
+    n_samples: int,
+    embargo_pct: float,
+):
+    """Embargo length shared by the purged splitters.
+
+    Integer / ordinal times: ``ceil(embargo_pct * n_samples)`` bars.
+    Datetime times: ``embargo_pct * (max_end - min_start)`` as a Timedelta.
+    Returns 0 when ``embargo_pct <= 0``.
+    """
+    if embargo_pct <= 0:
+        return 0
+    starts = pd.Series(label_start_times).reset_index(drop=True)
+    ends = pd.Series(label_end_times).reset_index(drop=True)
+    if np.issubdtype(starts.dtype, np.datetime64) or isinstance(
+        starts.iloc[0], (pd.Timestamp, np.datetime64)
+    ):
+        span = ends.max() - starts.min()
+        return pd.Timedelta(span) * float(embargo_pct)
+    return int(np.ceil(embargo_pct * n_samples))
+
+
 def apply_purge_and_embargo(
     train_indices: np.ndarray,
     test_indices: np.ndarray,
