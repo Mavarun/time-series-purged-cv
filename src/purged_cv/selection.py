@@ -138,33 +138,128 @@ def net_returns_from_positions(
     return gross, costs, gross - costs
 
 
+
+def net_returns_with_impact(
+    returns: np.ndarray,
+    positions: np.ndarray,
+    cost_bps: float,
+    impact_coef: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Gross, cost, and net returns with optional square-root impact.
+
+    Linear cost is ``cost_bps/1e4 * |delta position|``. When ``impact_coef`` > 0
+    an extra ``impact_coef * sqrt(|delta position|)`` term (in return units) is
+    charged on the same bar — a simple Almgren-Chriss-style temporary impact
+    proxy that penalises large switches more than linear bps alone.
+    """
+    gross, linear, _ = net_returns_from_positions(returns, positions, cost_bps)
+    P = np.asarray(positions, dtype=float)
+    prev = np.zeros_like(P)
+    prev[1:] = P[:-1]
+    delta = np.abs(P - prev)
+    impact = impact_coef * np.sqrt(delta)
+    costs = linear + impact
+    return gross, costs, gross - costs
+
+
+def trailing_scores(
+    net_window: np.ndarray,
+    positions_window: np.ndarray | None = None,
+    *,
+    mode: str = "sharpe",
+    shrink_intensity: float = 0.0,
+    turnover_penalty: float = 0.0,
+) -> np.ndarray:
+    """Per-trial score used by walk-forward selection.
+
+    Modes
+    -----
+    sharpe
+        trailing net Sharpe (status quo).
+    shrunk_sharpe
+        James-Stein shrink each trial's Sharpe toward the cross-sectional mean:
+        ``(1 - intensity) * SR_j + intensity * mean(SR)``. ``intensity`` in
+        [0, 1]; 0 recovers plain Sharpe.
+    sharpe_minus_turnover
+        ``SR_j - turnover_penalty * mean(|delta position_j|)`` over the window.
+        Requires ``positions_window``.
+    shrunk_sharpe_minus_turnover
+        shrink first, then apply the turnover penalty.
+    """
+    if mode not in {
+        "sharpe",
+        "shrunk_sharpe",
+        "sharpe_minus_turnover",
+        "shrunk_sharpe_minus_turnover",
+    }:
+        raise ValueError(f"unknown walk-forward score mode: {mode!r}")
+    w = np.asarray(net_window, dtype=float)
+    if w.ndim != 2:
+        raise ValueError("net_window must be T x N")
+    srs = w.mean(0) / np.maximum(w.std(0, ddof=1), 1e-12)
+    if mode in ("shrunk_sharpe", "shrunk_sharpe_minus_turnover"):
+        intensity = float(np.clip(shrink_intensity, 0.0, 1.0))
+        srs = (1.0 - intensity) * srs + intensity * float(srs.mean())
+    if mode in ("sharpe_minus_turnover", "shrunk_sharpe_minus_turnover"):
+        if positions_window is None:
+            raise ValueError("positions_window required for turnover-penalised modes")
+        P = np.asarray(positions_window, dtype=float)
+        prev = np.zeros_like(P)
+        prev[1:] = P[:-1]
+        turnover = np.abs(P - prev).mean(0)
+        srs = srs - float(turnover_penalty) * turnover
+    return srs
+
+
 def walk_forward_select(
     returns: np.ndarray,
     positions: np.ndarray,
     cost_bps: float,
     train_window: int = 504,
     step: int = 63,
+    *,
+    mode: str = "sharpe",
+    shrink_intensity: float = 0.5,
+    turnover_penalty: float = 5.0,
+    impact_coef: float = 0.0,
 ) -> dict:
-    """Rolling selection by trailing net Sharpe; returns OOS net series."""
-    _, _, net = net_returns_from_positions(returns, positions, cost_bps)
+    """Rolling selection by a trailing score; returns OOS net series.
+
+    Default ``mode="sharpe"`` preserves the original behaviour. Other modes
+    use :func:`trailing_scores`. Costs on the stitched OOS path use
+    :func:`net_returns_with_impact` so an impact coefficient can be studied
+    without changing the linear-bps baseline.
+    """
+    _, _, net = net_returns_with_impact(returns, positions, cost_bps, impact_coef)
     T = len(returns)
     if train_window >= T:
         raise ValueError("train_window must be shorter than the series")
     oos_pos = np.zeros(T)
     chosen = []
     for start in range(train_window, T, step):
-        window = net[start - train_window : start]
-        srs = window.mean(0) / np.maximum(window.std(0, ddof=1), 1e-12)
+        slw = slice(start - train_window, start)
+        srs = trailing_scores(
+            net[slw],
+            positions[slw],
+            mode=mode,
+            shrink_intensity=shrink_intensity,
+            turnover_penalty=turnover_penalty,
+        )
         j = int(np.argmax(srs))
         chosen.append(j)
         oos_pos[start : start + step] = positions[start : start + step, j]
-    g, c, n = net_returns_from_positions(returns, oos_pos, cost_bps)
+    g, c, n = net_returns_with_impact(returns, oos_pos, cost_bps, impact_coef)
     sl = slice(train_window, T)
     return {
         "oos_net": n[sl],
         "oos_gross": g[sl],
         "oos_costs": c[sl],
         "chosen": np.asarray(chosen),
+        "mode": mode,
+        "shrink_intensity": float(shrink_intensity),
+        "turnover_penalty": float(turnover_penalty),
+        "impact_coef": float(impact_coef),
+        "n_switches": int(np.sum(np.diff(chosen) != 0)) if len(chosen) > 1 else 0,
     }
 
 
