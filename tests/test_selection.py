@@ -10,8 +10,10 @@ from purged_cv.selection import (
     expanding_vol,
     make_ar_returns,
     net_returns_from_positions,
+    net_returns_with_impact,
     rule_positions,
     run_selection_diagnostics,
+    trailing_scores,
     walk_forward_select,
 )
 from purged_cv.sharpe import deflated_sharpe_for_selection
@@ -123,3 +125,41 @@ def test_z_threshold_positions_differ_under_full_sample_vol():
     assert not np.allclose(P_exp, P_full)
     with pytest.raises(ValueError):
         rule_positions(r, grid, vol_mode="bogus")
+
+
+def test_impact_costs_exceed_linear_bps():
+    r = np.array([0.0, 0.01, -0.01, 0.02, 0.0])
+    pos = np.array([0.0, 1.0, -1.0, 1.0, 0.0])
+    g0, c0, n0 = net_returns_with_impact(r, pos, cost_bps=10.0, impact_coef=0.0)
+    g1, c1, n1 = net_returns_with_impact(r, pos, cost_bps=10.0, impact_coef=0.01)
+    np.testing.assert_allclose(g0, g1)
+    assert (c1 >= c0).all() and c1.sum() > c0.sum()
+    np.testing.assert_allclose(n1, g1 - c1)
+
+
+def test_trailing_scores_shrink_and_turnover():
+    rng = np.random.default_rng(0)
+    net = rng.normal(0, 0.01, size=(200, 4))
+    net[:, 0] += 0.002
+    P = np.zeros((200, 4))
+    P[::2, 0] = 1.0
+    P[1::2, 0] = -1.0
+    P[:, 1] = 1.0
+    plain = trailing_scores(net, P, mode="sharpe")
+    shrunk = trailing_scores(net, P, mode="shrunk_sharpe", shrink_intensity=1.0)
+    assert np.allclose(shrunk, shrunk.mean())
+    with_to = trailing_scores(net, P, mode="sharpe_minus_turnover", turnover_penalty=50.0)
+    assert with_to[0] < plain[0]
+    with pytest.raises(ValueError):
+        trailing_scores(net, mode="nope")
+
+
+def test_turnover_penalty_reduces_switches_on_null():
+    r = make_ar_returns(1500, phi=0.0, seed=2)
+    P = rule_positions(r, default_rule_grid())
+    plain = walk_forward_select(r, P, cost_bps=5.0, train_window=504, step=63, mode="sharpe")
+    penal = walk_forward_select(
+        r, P, cost_bps=5.0, train_window=504, step=63, mode="sharpe_minus_turnover", turnover_penalty=10.0
+    )
+    assert penal["n_switches"] <= plain["n_switches"]
+    assert penal["oos_costs"].mean() <= plain["oos_costs"].mean() + 1e-12
