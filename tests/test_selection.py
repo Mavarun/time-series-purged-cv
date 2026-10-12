@@ -181,3 +181,20 @@ def test_selector_ablation_reports_all_modes():
     # penalised OOS Sharpe can fall. Only require fewer/equal switches.
     edge = rep["by_impact"]["0.0"]
     assert edge["sharpe_minus_turnover"]["n_switches"] <= edge["sharpe"]["n_switches"]
+
+
+def test_selector_ablation_script_builds_offline_report():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "run_selector_ablation.py"
+    spec = importlib.util.spec_from_file_location("run_selector_ablation", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    args = mod.parse_args(
+        ["--seeds", "0", "--n-bars", "900", "--phis", "0.0", "--cost-bps", "2", "--impact-coefs", "0.0"]
+    )
+    rep = mod.build(args)
+    assert "runs" in rep and len(rep["runs"]) == 1
+    md = mod.summarise(rep)
+    assert "Walk-forward selector ablation" in md
