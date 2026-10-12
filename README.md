@@ -77,14 +77,52 @@ Best-of-40 rule selection (seed 1):
 
 Reading: on the null, the full-sample winner shows an attractive 0.4-0.5 Sharpe, but DSR stays far below 0.95, PBO is about 0.5, and walk-forward OOS net Sharpe is <= 0. With a planted edge and low costs, all three diagnostics agree it is real. At 5 bps the same edge's walk-forward net Sharpe roughly halves (1.32 -> 0.63), and DSR no longer clears 0.95.
 
+## Slice 3 (2026-10-12): causal vol, walk-forward shrinkage / turnover, sqrt impact
+
+### What was added
+
+- **Causal expanding vol** for z-thresholded rules (`expanding_vol`, default). The old full-sample return std is kept as `vol_mode="full_sample"` for ablation; it is a mild look-ahead and is no longer the default.
+- **Walk-forward score modes** (`trailing_scores`, `walk_forward_select`): plain trailing net Sharpe (status quo), James-Stein shrinkage toward the cross-sectional mean, Sharpe minus a turnover penalty, and both. Default mode remains `"sharpe"` so existing diagnostics are unchanged.
+- **Square-root impact costs** (`net_returns_with_impact`): `cost_bps/1e4 * |delta| + impact_coef * sqrt(|delta|)` on the same bar.
+- **Ablation harness** (`run_selector_ablation`, `scripts/run_selector_ablation.py` → `artifacts/selector_ablation.{md,json}`).
+
+### Results (mean of 4 seeds; n=2520, train=504, step=63, shrink=0.5, turnover_penalty=5)
+
+OOS net Sharpe (annualised), linear costs, no impact:
+
+| phi | cost bps | sharpe | shrunk | sharpe − turnover | shrunk − turnover |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.00 | 2 | -0.22 | -0.22 | **0.13** | **0.13** |
+| 0.00 | 5 | -0.30 | -0.30 | **0.08** | **0.08** |
+| 0.10 | 2 | **0.90** | **0.90** | 0.21 | 0.20 |
+| 0.10 | 5 | **0.33** | **0.33** | 0.17 | 0.16 |
+
+Switches roughly halve under the turnover penalty (null: 17.8 → 8.5; edge at 2 bps: 12.0 → 6.8). Shrinkage alone at intensity 0.5 does not move the needle on this grid. Adding square-root impact (`0.0005` / `0.001`) lowers every OOS Sharpe; under high impact the turnover penalty is less harmful on the edge because plain Sharpe starts churning more.
+
+**Reading (honest):** the turnover penalty is a good *null* regulariser — it stops the walk-forward from chasing noisy high-turnover winners and flips null OOS Sharpe from negative to near zero — but a planted lag-1 momentum edge *is* high turnover, so the same penalty cuts a real edge's OOS Sharpe from ~0.9 to ~0.2. Do not turn it on by default when the candidate strategies are themselves high-frequency. Causal expanding vol vs full-sample vol changes WF OOS Sharpe only slightly on this synthetic AR (edge 0.90 vs 0.93).
+
+### Test design
+
+| Experiment | Ground truth | What is compared |
+|---|---|---|
+| Expanding vol causality | past vols unchanged when the future is rewritten | `expanding_vol` |
+| Z-threshold path | expanding ≠ full-sample positions | `rule_positions(..., vol_mode=)` |
+| Impact | impact_coef > 0 raises costs | `net_returns_with_impact` |
+| Turnover penalty | fewer (or equal) switches vs plain Sharpe | walk-forward modes |
+| Ablation script | all four modes × three impact levels | `run_selector_ablation` |
+
+Reproduce: `python scripts/run_selector_ablation.py` (offline, seeded).
+
 ### Weaknesses (honest)
 
 - Everything is synthetic. No market data is used in tests, so these are method checks, not evidence of any tradable edge.
 - **Cross-sectional DSR over-deflates mirrored grids.** Long/short mirror images of a real edge inflate the cross-trial Sharpe variance, so the paper's default variance rejects a genuine strategy (0.045 above). The null-variance DSR is reported alongside, and a test pins this behaviour. Neither variance choice models trial correlation, so the effective number of trials is overstated (conservative).
 - The PBO metric is per-period Sharpe on equal contiguous blocks. Leftover rows are dropped, and S=16 means 12,870 splits (~2 s).
 - Leakage results average 3 seeds because overlapping labels leave only ~n/h independent observations. Single-seed fold scores swing by about ±0.05.
-- The walk-forward selector uses trailing net Sharpe only, with no shrinkage or turnover penalty. Costs are linear bps with no impact model.
-- Z-thresholded rules scale by the full-sample return std (a mild global input; zero-threshold rules are strictly causal and tested as such).
+- **Turnover penalty helps the null and hurts short-horizon edges.** It is available but not the walk-forward default; pick it only when candidate rules are not themselves high-turnover.
+- James-Stein shrinkage at intensity 0.5 is nearly a no-op on this 40-trial grid; stronger intensities or a variance-aware intensity schedule are untested.
+- Square-root impact is a one-parameter proxy, not a calibrated Almgren-Chriss model, and is not fit to any tape.
+- Expanding-vol warm-up still uses the first `min_periods` bars as a floor, so the very start of the sample is only approximately causal.
 
 ## How to run
 
@@ -110,7 +148,8 @@ src/purged_cv/
   overfitting.py# PBO via CSCV
   sharpe.py     # PSR, deflated Sharpe, min track record length
   leakage.py    # naive vs purged vs CPCV on autocorrelated null labels
-  selection.py  # best-of-N rule selection with costs: DSR, PBO, walk-forward
+  selection.py  # best-of-N rule selection with costs: DSR, PBO, walk-forward,
+                # causal vol, shrinkage / turnover scores, sqrt impact
   embargo.py    # purge / embargo helpers
   weights.py    # optional average-uniqueness sample weights
   data.py       # synthetic AR + optional yfinance helpers
@@ -124,7 +163,7 @@ tests/
 
 ## Limits / what is still weak
 
-- Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Costs are modelled only in the selection diagnostics (linear bps).
+- Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
 - Embargo length is a crude fraction of the sample span, not an asset-specific correlation time.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
