@@ -7,6 +7,13 @@ from purged_cv.overfitting import probability_of_backtest_overfitting
 from purged_cv.sharpe import deflated_sharpe_ratio, probabilistic_sharpe_ratio
 from purged_cv.metrics import compare_naive_vs_purged_cv
 from purged_cv.data import make_synthetic_ar_dataset, make_horizon_labels
+from purged_cv.selection import (
+    expanding_vol,
+    net_returns_with_impact,
+    run_selector_ablation,
+    trailing_scores,
+    walk_forward_select,
+)
 
 __all__ = [
     "PurgedKFold",
@@ -19,6 +26,11 @@ __all__ = [
     "probabilistic_sharpe_ratio",
     "make_synthetic_ar_dataset",
     "make_horizon_labels",
+    "expanding_vol",
+    "net_returns_with_impact",
+    "run_selector_ablation",
+    "trailing_scores",
+    "walk_forward_select",
 ]
 
 __version__ = "0.1.0"
