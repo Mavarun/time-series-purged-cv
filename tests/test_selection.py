@@ -7,6 +7,7 @@ import pytest
 
 from purged_cv.selection import (
     default_rule_grid,
+    expanding_vol,
     make_ar_returns,
     net_returns_from_positions,
     rule_positions,
@@ -102,3 +103,23 @@ def test_diagnostics_script_runs_offline_small():
     rep = mod.build_report(args)
     assert set(rep) == {"leakage", "leakage_controls", "selection"}
     assert len(rep["selection"]) == 2
+
+
+def test_expanding_vol_is_causal_and_positive():
+    r = make_ar_returns(300, phi=0.0, seed=3)
+    v = expanding_vol(r, min_periods=20)
+    assert len(v) == len(r) and (v > 0).all()
+    r2 = r.copy()
+    r2[200:] = np.random.default_rng(1).normal(0, 0.05, size=len(r) - 200)
+    v2 = expanding_vol(r2, min_periods=20)
+    np.testing.assert_allclose(v[:200], v2[:200])
+
+
+def test_z_threshold_positions_differ_under_full_sample_vol():
+    r = make_ar_returns(800, phi=0.05, seed=5)
+    grid = [(5, 1, 0.5), (21, -1, 0.5)]
+    P_exp = rule_positions(r, grid, vol_mode="expanding")
+    P_full = rule_positions(r, grid, vol_mode="full_sample")
+    assert not np.allclose(P_exp, P_full)
+    with pytest.raises(ValueError):
+        rule_positions(r, grid, vol_mode="bogus")

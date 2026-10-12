@@ -23,6 +23,11 @@ Pipeline (all synthetic, seeded, offline)
      trailing ``train_window`` net Sharpe, hold it for the next ``step``
      bars; the stitched OOS position path is re-costed (switching trades are
      charged too).
+   * enhanced selectors (optional): James-Stein shrinkage of trailing Sharpes
+     toward the cross-sectional mean, and a turnover penalty
+     ``Sharpe - turnover_penalty * mean(|delta position|)`` so noisy
+     high-turnover winners are less likely to be picked; optional
+     square-root impact costs on top of linear bps.
 """
 
 from __future__ import annotations
@@ -57,18 +62,62 @@ def default_rule_grid(
     return [(L, d, z) for L in lookbacks for d in (1, -1) for z in thresholds]
 
 
-def rule_positions(returns: np.ndarray, grid) -> np.ndarray:
-    """``T x N`` positions; row ``t`` is held over ``r_{t}`` (decided at t-1)."""
+def expanding_vol(returns: np.ndarray, min_periods: int = 20) -> np.ndarray:
+    """Causal per-bar std: ``std(r[:t+1])`` with a warm-up floor at ``min_periods``.
+
+    Replaces the old full-sample return std used to z-score lookback means
+    (a mild look-ahead). Bars before ``min_periods`` reuse the std of the
+    first ``min_periods`` observations so early signals stay defined.
+    """
+    r = np.asarray(returns, dtype=float)
+    T = len(r)
+    out = np.empty(T)
+    if T == 0:
+        return out
+    ss = 0.0
+    s = 0.0
+    for t in range(T):
+        s += r[t]
+        ss += r[t] * r[t]
+        n = t + 1
+        if n >= 2:
+            var = (ss - s * s / n) / (n - 1)
+            out[t] = float(np.sqrt(max(var, 0.0)))
+        else:
+            out[t] = 0.0
+    floor = out[min(min_periods, T) - 1]
+    if not np.isfinite(floor) or floor <= 0:
+        floor = float(np.std(r, ddof=1)) if T > 1 else 1.0
+    out[: min(min_periods, T)] = floor
+    out[out <= 0] = floor if floor > 0 else 1.0
+    return out
+
+
+def rule_positions(
+    returns: np.ndarray, grid, *, vol_mode: str = "expanding"
+) -> np.ndarray:
+    """``T x N`` positions; row ``t`` is held over ``r_{t}`` (decided at t-1).
+
+    ``vol_mode``:
+      * ``expanding`` (default) — causal expanding std for z-thresholds.
+      * ``full_sample`` — previous behaviour (look-ahead; kept for ablation).
+    """
     r = np.asarray(returns, dtype=float)
     T = len(r)
     csum = np.concatenate([[0.0], np.cumsum(r)])
-    vol = r.std(ddof=1) if T > 1 else 1.0
+    if vol_mode == "expanding":
+        vol_path = expanding_vol(r)
+    elif vol_mode == "full_sample":
+        vol_path = np.full(T, r.std(ddof=1) if T > 1 else 1.0)
+    else:
+        raise ValueError(f"unknown vol_mode: {vol_mode!r}")
     P = np.zeros((T, len(grid)))
     for j, (L, d, z) in enumerate(grid):
         decided = np.zeros(T)
         idx = np.arange(L - 1, T)
         mean = (csum[idx + 1] - csum[idx + 1 - L]) / L
-        zscore = mean / (vol / np.sqrt(L))
+        # vol at decision time idx (close of bar), already causal under expanding
+        zscore = mean / (vol_path[idx] / np.sqrt(L))
         sig = np.sign(mean) * (np.abs(zscore) >= z)
         decided[idx] = d * sig
         P[1:, j] = decided[:-1]  # decision at close t earns r_{t+1}
