@@ -163,3 +163,21 @@ def test_turnover_penalty_reduces_switches_on_null():
     )
     assert penal["n_switches"] <= plain["n_switches"]
     assert penal["oos_costs"].mean() <= plain["oos_costs"].mean() + 1e-12
+
+
+def test_selector_ablation_reports_all_modes():
+    from purged_cv.selection import run_selector_ablation
+
+    rep = run_selector_ablation(n=900, phi=0.1, seed=0, cost_bps=2.0, train_window=300, step=50)
+    assert set(rep["by_impact"]) == {"0.0", "0.0005", "0.001"}
+    modes = set(rep["by_impact"]["0.0"])
+    assert modes == {
+        "sharpe",
+        "shrunk_sharpe",
+        "sharpe_minus_turnover",
+        "shrunk_sharpe_minus_turnover",
+    }
+    # Honest: turnover penalty cuts switches; a lag-1 edge is high turnover so
+    # penalised OOS Sharpe can fall. Only require fewer/equal switches.
+    edge = rep["by_impact"]["0.0"]
+    assert edge["sharpe_minus_turnover"]["n_switches"] <= edge["sharpe"]["n_switches"]

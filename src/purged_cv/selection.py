@@ -329,3 +329,87 @@ def run_selection_diagnostics(
         wf_oos_cost_drag_bps_per_day=float(wf["oos_costs"].mean() * 1e4),
         wf_n_obs=int(len(wf["oos_net"])),
     )
+
+
+def compare_walk_forward_modes(
+    returns: np.ndarray,
+    positions: np.ndarray,
+    cost_bps: float,
+    train_window: int = 504,
+    step: int = 63,
+    impact_coef: float = 0.0,
+    shrink_intensity: float = 0.5,
+    turnover_penalty: float = 5.0,
+) -> dict:
+    """Walk-forward OOS net Sharpe for each selector mode (same path costing)."""
+    modes = (
+        "sharpe",
+        "shrunk_sharpe",
+        "sharpe_minus_turnover",
+        "shrunk_sharpe_minus_turnover",
+    )
+    ann = np.sqrt(252.0)
+    out = {}
+    from purged_cv.sharpe import sharpe_ratio
+
+    for mode in modes:
+        wf = walk_forward_select(
+            returns,
+            positions,
+            cost_bps,
+            train_window,
+            step,
+            mode=mode,
+            shrink_intensity=shrink_intensity,
+            turnover_penalty=turnover_penalty,
+            impact_coef=impact_coef,
+        )
+        out[mode] = {
+            "oos_net_sharpe_ann": float(sharpe_ratio(wf["oos_net"]) * ann),
+            "oos_gross_sharpe_ann": float(sharpe_ratio(wf["oos_gross"]) * ann),
+            "oos_cost_drag_bps_per_day": float(wf["oos_costs"].mean() * 1e4),
+            "n_switches": int(wf["n_switches"]),
+            "n_obs": int(len(wf["oos_net"])),
+        }
+    return out
+
+
+def run_selector_ablation(
+    n: int = 2520,
+    phi: float = 0.0,
+    vol: float = 0.01,
+    cost_bps: float = 5.0,
+    seed: int = 0,
+    grid=None,
+    train_window: int = 504,
+    step: int = 63,
+    impact_coefs: tuple[float, ...] = (0.0, 0.0005, 0.001),
+    shrink_intensity: float = 0.5,
+    turnover_penalty: float = 5.0,
+) -> dict:
+    """Null and edge ablations of enhanced walk-forward selectors + impact."""
+    grid = grid or default_rule_grid()
+    r = make_ar_returns(n, phi, vol, seed)
+    P = rule_positions(r, grid)
+    by_impact = {}
+    for ic in impact_coefs:
+        by_impact[str(ic)] = compare_walk_forward_modes(
+            r,
+            P,
+            cost_bps,
+            train_window,
+            step,
+            impact_coef=ic,
+            shrink_intensity=shrink_intensity,
+            turnover_penalty=turnover_penalty,
+        )
+    return {
+        "phi": phi,
+        "cost_bps": cost_bps,
+        "seed": seed,
+        "n": n,
+        "n_trials": len(grid),
+        "shrink_intensity": shrink_intensity,
+        "turnover_penalty": turnover_penalty,
+        "by_impact": by_impact,
+    }
