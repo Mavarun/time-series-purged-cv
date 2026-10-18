@@ -71,3 +71,47 @@ def test_genuine_edge_survives_deflation():
         rep = deflated_sharpe_for_selection(R)
         assert rep.best_index == 3
         assert rep.dsr > 0.95
+
+
+def test_effective_trials_participation_limits():
+    from purged_cv.sharpe import effective_trials_participation
+
+    rng = np.random.default_rng(0)
+    indep = rng.normal(size=(5000, 8))
+    assert effective_trials_participation(indep) == pytest.approx(8.0, rel=0.05)
+    base = rng.normal(size=(5000, 1))
+    clones = np.hstack([base, 2 * base, -base, base + 1.0])
+    assert effective_trials_participation(clones) == pytest.approx(1.0, abs=1e-6)
+    # a never-trading (constant) column counts as its own direction, not NaN
+    with_flat = np.hstack([indep[:, :2], np.zeros((5000, 1))])
+    assert effective_trials_participation(with_flat) == pytest.approx(3.0, rel=0.05)
+
+
+def test_null_max_draws_match_closed_form_for_independent_trials():
+    from purged_cv.sharpe import null_max_sharpe_draws
+
+    rng = np.random.default_rng(1)
+    M = rng.normal(size=(4000, 20))
+    var = 1.0 / 3999
+    draws = null_max_sharpe_draws(M, n_sims=20000, seed=0)
+    # closed form is an approximation; agree within a few percent at N=20
+    assert draws.mean() == pytest.approx(expected_max_sharpe(20, var), rel=0.06)
+    # perfectly correlated trials -> max of one draw, mean ~ 0
+    one = np.repeat(M[:, :1], 20, axis=1)
+    assert abs(null_max_sharpe_draws(one, n_sims=20000, seed=0).mean()) < 0.1 * np.sqrt(var)
+    # mirror pair -> E|z| = sqrt(2/pi), larger than the max of 2 iid draws
+    mirror = np.hstack([M[:, :1], -M[:, :1]])
+    m = null_max_sharpe_draws(mirror, n_sims=40000, seed=0).mean() / np.sqrt(var)
+    assert m == pytest.approx(np.sqrt(2 / np.pi), abs=0.02)
+    assert m > expected_max_sharpe(2, 1.0)
+
+
+def test_implied_effective_trials_inverts_closed_form():
+    from purged_cv.sharpe import implied_effective_trials
+
+    var = 1.0 / 2000
+    for n in (2, 10, 40, 500):
+        assert implied_effective_trials(expected_max_sharpe(n, var), var) == pytest.approx(n, rel=1e-6)
+    assert implied_effective_trials(-0.01, var) == 1.0
+    with pytest.raises(ValueError):
+        implied_effective_trials(0.1, 0.0)
