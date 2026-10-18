@@ -176,6 +176,8 @@ def test_selector_ablation_reports_all_modes():
         "shrunk_sharpe",
         "sharpe_minus_turnover",
         "shrunk_sharpe_minus_turnover",
+        "eb_sharpe",
+        "eb_sharpe_minus_turnover",
     }
     # Honest: turnover penalty cuts switches; a lag-1 edge is high turnover so
     # penalised OOS Sharpe can fall. Only require fewer/equal switches.
@@ -198,6 +200,7 @@ def test_selector_ablation_script_builds_offline_report():
     assert "runs" in rep and len(rep["runs"]) == 1
     md = mod.summarise(rep)
     assert "Walk-forward selector ablation" in md
+    assert "EB re-rank share" in md and "| EB |" in md
 
 
 def test_uniform_shrinkage_cannot_change_walk_forward_picks():

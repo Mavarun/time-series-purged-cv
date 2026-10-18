@@ -395,6 +395,8 @@ def compare_walk_forward_modes(
         "shrunk_sharpe",
         "sharpe_minus_turnover",
         "shrunk_sharpe_minus_turnover",
+        "eb_sharpe",
+        "eb_sharpe_minus_turnover",
     )
     ann = np.sqrt(252.0)
     out = {}
@@ -413,6 +415,7 @@ def compare_walk_forward_modes(
             impact_coef=impact_coef,
         )
         out[mode] = {
+            "chosen": [int(j) for j in wf["chosen"]],
             "oos_net_sharpe_ann": float(sharpe_ratio(wf["oos_net"]) * ann),
             "oos_gross_sharpe_ann": float(sharpe_ratio(wf["oos_gross"]) * ann),
             "oos_cost_drag_bps_per_day": float(wf["oos_costs"].mean() * 1e4),
