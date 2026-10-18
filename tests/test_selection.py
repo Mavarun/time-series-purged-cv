@@ -74,6 +74,10 @@ def test_planted_edge_survives_pbo_dsr_and_walk_forward_net_of_costs():
         assert d.dsr_null > 0.95
         assert d.wf_oos_net_sharpe_ann > 1.0
         assert d.wf_oos_net_sharpe_ann < d.wf_oos_gross_sharpe_ann
+        # correlation-aware hurdle is never stricter than 40 independent trials
+        assert d.dsr_null_simulated >= d.dsr_null
+        assert d.n_effective_trials_simulated < d.n_trials
+        assert d.max_stat_pvalue < 0.01
 
 
 def test_higher_costs_lower_net_performance():

@@ -18,6 +18,8 @@ Pipeline (all synthetic, seeded, offline)
      :func:`purged_cv.sharpe.deflated_sharpe_for_selection`; the grid holds
      long and short mirror images, so the cross-sectional DSR over-deflates
      when a real edge exists);
+   * the same DSR against a correlation-aware hurdle (simulated effective
+     N) and a max-statistic p-value (see :mod:`purged_cv.calibration`);
    * PBO via CSCV;
    * walk-forward OOS: every ``step`` bars pick the trial with the best
      trailing ``train_window`` net Sharpe, hold it for the next ``step``
@@ -37,7 +39,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 
 from purged_cv.overfitting import probability_of_backtest_overfitting
-from purged_cv.sharpe import deflated_sharpe_for_selection, sharpe_ratio
+from purged_cv.sharpe import deflated_sharpe_for_selection, max_sharpe_pvalue, sharpe_ratio
 
 
 def make_ar_returns(n: int = 2520, phi: float = 0.0, vol: float = 0.01, seed: int = 0) -> np.ndarray:
@@ -329,6 +331,9 @@ class SelectionDiagnostics:
     wf_oos_gross_sharpe_ann: float
     wf_oos_cost_drag_bps_per_day: float
     wf_n_obs: int
+    dsr_null_simulated: float = float("nan")
+    n_effective_trials_simulated: float = float("nan")
+    max_stat_pvalue: float = float("nan")
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -356,6 +361,10 @@ def run_selection_diagnostics(
     warm = max(L for L, _, _ in grid) + 1
     rep = deflated_sharpe_for_selection(net[warm:], sr_variance="cross_sectional")
     rep_null = deflated_sharpe_for_selection(net[warm:], sr_variance="null")
+    rep_sim = deflated_sharpe_for_selection(
+        net[warm:], sr_variance="null", n_trials_mode="simulated", seed=seed
+    )
+    max_p = max_sharpe_pvalue(net[warm:], n_sims=10000, seed=seed)
     pbo = probability_of_backtest_overfitting(net[warm:], n_partitions=n_partitions)
     wf = walk_forward_select(r, P, cost_bps, train_window, step)
     ann = np.sqrt(252.0)
@@ -376,6 +385,9 @@ def run_selection_diagnostics(
         wf_oos_gross_sharpe_ann=float(sharpe_ratio(wf["oos_gross"]) * ann),
         wf_oos_cost_drag_bps_per_day=float(wf["oos_costs"].mean() * 1e4),
         wf_n_obs=int(len(wf["oos_net"])),
+        dsr_null_simulated=rep_sim.dsr,
+        n_effective_trials_simulated=rep_sim.n_effective_trials,
+        max_stat_pvalue=max_p,
     )
 
 

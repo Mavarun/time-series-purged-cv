@@ -73,12 +73,16 @@ def main(argv=None) -> int:
         print(f"control {name}: naive-purged gap = {c['naive_minus_purged']:+.3f}")
     print()
     print("## Best-of-40 rule selection, net of costs (annualised Sharpe)")
-    print("| phi | cost bps | best trial | IS best net SR | PSR(0) | DSR null | DSR x-sec | PBO | WF OOS net SR | WF OOS gross SR |")
-    print("|---|---|---|---|---|---|---|---|---|---|")
+    print(
+        "| phi | cost bps | best trial | IS best net SR | PSR(0) | DSR null | DSR null, sim. N_eff | N_eff "
+        "| max-stat p | DSR x-sec | PBO | WF OOS net SR | WF OOS gross SR |"
+    )
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for d in rep["selection"]:
         print(
             f"| {d['phi']:.2f} | {d['cost_bps']:.1f} | {tuple(d['best_trial'])} | "
             f"{d['is_best_net_sharpe_ann']:.2f} | {d['psr_vs_zero']:.3f} | {d['dsr_null']:.3f} | "
+            f"{d['dsr_null_simulated']:.3f} | {d['n_effective_trials_simulated']:.1f} | {d['max_stat_pvalue']:.4f} | "
             f"{d['dsr_cross_sectional']:.3f} | {d['pbo']:.3f} | {d['wf_oos_net_sharpe_ann']:.2f} | "
             f"{d['wf_oos_gross_sharpe_ann']:.2f} |"
         )
