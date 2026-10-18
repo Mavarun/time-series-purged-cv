@@ -103,6 +103,92 @@ def min_track_record_length(
     return float(1.0 + (1.0 - skew * sr + (kurtosis - 1.0) / 4.0 * sr**2) * (z / (sr - sr_benchmark)) ** 2)
 
 
+def trial_correlation(trial_returns: np.ndarray) -> np.ndarray:
+    """``N x N`` Pearson correlation of trial return columns.
+
+    Constant columns (e.g. a rule that never trades) get zero off-diagonal
+    correlation and a unit diagonal so the matrix stays a valid correlation.
+    """
+    M = np.asarray(trial_returns, dtype=float)
+    if M.ndim != 2 or M.shape[1] < 1:
+        raise ValueError("trial_returns must be T x N")
+    sd = M.std(0, ddof=1)
+    Z = np.zeros_like(M)
+    live = sd > 0
+    Z[:, live] = (M[:, live] - M[:, live].mean(0)) / sd[live]
+    C = (Z.T @ Z) / (M.shape[0] - 1.0)
+    np.fill_diagonal(C, 1.0)
+    return np.clip(C, -1.0, 1.0)
+
+
+def effective_trials_participation(trial_returns: np.ndarray) -> float:
+    """Eigenvalue participation ratio ``(sum l)^2 / sum l^2`` of the trial correlation.
+
+    Counts the number of roughly independent *directions* spanned by the
+    trials: N for uncorrelated trials, 1 for perfectly (anti-)correlated
+    ones. It is a dimension count, not a max-statistic count: a rule and its
+    exact mirror image span one direction, yet ``max(x, -x) = |x|`` is a
+    larger draw than the max of one trial, so this measure understates the
+    selection hurdle on mirrored grids (anti-conservative).
+    """
+    C = trial_correlation(trial_returns)
+    lam = np.clip(np.linalg.eigvalsh(C), 0.0, None)
+    return float(lam.sum() ** 2 / np.sum(lam**2))
+
+
+def null_max_sharpe_draws(
+    trial_returns: np.ndarray,
+    trials_sr_variance: float | None = None,
+    n_sims: int = 4000,
+    seed: int = 0,
+) -> np.ndarray:
+    """Monte Carlo draws of the best per-period Sharpe among zero-skill trials.
+
+    Under H0 every trial has true Sharpe 0 and the estimated Sharpes are
+    jointly ~ ``N(0, V * C)`` with ``C`` the trial correlation (Sharpe
+    estimates of near-zero-Sharpe series inherit the return correlation) and
+    ``V`` the per-trial sampling variance (default ``1 / (T - 1)``). Unlike
+    the closed-form E[max SR], this keeps the grid's correlation and mirror
+    structure, so correlated trials are not counted as independent.
+    """
+    M = np.asarray(trial_returns, dtype=float)
+    T, N = M.shape
+    var = 1.0 / (T - 1.0) if trials_sr_variance is None else float(trials_sr_variance)
+    if var < 0:
+        raise ValueError("trials_sr_variance must be >= 0")
+    C = trial_correlation(M)
+    w, V = np.linalg.eigh(C)
+    L = V * np.sqrt(np.clip(w, 0.0, None))
+    Z = np.random.default_rng(seed).standard_normal((int(n_sims), N)) @ L.T
+    return Z.max(1) * np.sqrt(var)
+
+
+def _expected_max_sharpe_continuous(n: float, var: float) -> float:
+    z1 = norm.ppf(1.0 - 1.0 / n)
+    z2 = norm.ppf(1.0 - 1.0 / (n * np.e))
+    return float(np.sqrt(var) * ((1.0 - EULER_GAMMA) * z1 + EULER_GAMMA * z2))
+
+
+def implied_effective_trials(expected_max: float, trials_sr_variance: float) -> float:
+    """Invert the false-strategy formula: the N whose E[max SR] equals ``expected_max``.
+
+    Treats N as continuous (bisection on log N). Returns 1.0 when the
+    target is not positive (no selection inflation).
+    """
+    if trials_sr_variance <= 0:
+        raise ValueError("trials_sr_variance must be > 0")
+    if expected_max <= 0:
+        return 1.0
+    lo, hi = np.log(1.0 + 1e-9), np.log(1e12)
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if _expected_max_sharpe_continuous(np.exp(mid), trials_sr_variance) < expected_max:
+            lo = mid
+        else:
+            hi = mid
+    return float(np.exp(0.5 * (lo + hi)))
+
+
 @dataclass
 class SelectionReport:
     """DSR diagnostics for picking the best column of a ``T x N`` trial matrix."""
