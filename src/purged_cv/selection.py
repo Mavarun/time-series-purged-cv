@@ -162,6 +162,33 @@ def net_returns_with_impact(
     return gross, costs, gross - costs
 
 
+def empirical_bayes_sharpes(net_window: np.ndarray) -> np.ndarray:
+    """Normal-normal posterior means of per-period Sharpes (see ``eb_sharpe``)."""
+    from scipy.stats import kurtosis as _kurt
+    from scipy.stats import skew as _skew
+
+    w = np.asarray(net_window, dtype=float)
+    T = w.shape[0]
+    sd = w.std(0, ddof=1)
+    live = sd > 0
+    srs = np.zeros(w.shape[1])
+    srs[live] = w[:, live].mean(0) / sd[live]
+    g3 = np.zeros(w.shape[1])
+    g4 = np.full(w.shape[1], 3.0)
+    if live.any():
+        g3[live] = _skew(w[:, live], axis=0)
+        g4[live] = _kurt(w[:, live], axis=0, fisher=False)
+    se2 = np.maximum(1.0 - g3 * srs + (g4 - 1.0) / 4.0 * srs**2, 1e-12) / (T - 1.0)
+    se2[~live] = np.inf  # a never-trading rule carries no evidence
+    m = float(srs[live].mean()) if live.any() else 0.0
+    finite = np.isfinite(se2)
+    tau2 = max(float(srs[live].var(ddof=1)) - float(se2[finite].mean()), 0.0) if live.sum() > 1 else 0.0
+    weight = np.where(finite, tau2 / (tau2 + np.where(finite, se2, 1.0)), 0.0)
+    post = m + weight * (srs - m)
+    # deterministic tie-break by raw Sharpe when the posterior is flat
+    return post + 1e-9 * srs
+
+
 def trailing_scores(
     net_window: np.ndarray,
     positions_window: np.ndarray | None = None,
@@ -183,18 +210,33 @@ def trailing_scores(
         intensity this is a positive affine map of the Sharpes, so for
         ``intensity < 1`` it **never changes the argmax** (walk-forward picks
         are identical to ``sharpe``); it only matters when combined with the
-        turnover penalty, where it rescales Sharpe against the penalty.
+        turnover penalty, where it rescales Sharpe against the penalty. Use
+        ``eb_sharpe`` for shrinkage that can re-rank trials.
     sharpe_minus_turnover
         ``SR_j - turnover_penalty * mean(|delta position_j|)`` over the window.
         Requires ``positions_window``.
     shrunk_sharpe_minus_turnover
         shrink first, then apply the turnover penalty.
+    eb_sharpe
+        empirical-Bayes (normal-normal) posterior mean of each trial's Sharpe
+        with a **per-trial** standard error (Mertens / Lo, using the
+        window's skew and kurtosis, so rarely-trading, fat-tailed rules get a
+        larger error). Prior variance ``tau^2 = max(var(SR) - mean(se^2), 0)``
+        is estimated from the window's own cross-section; trial ``j`` keeps
+        weight ``tau^2 / (tau^2 + se_j^2)``. Because weights differ by trial
+        this *can* re-rank trials, unlike ``shrunk_sharpe``. When no
+        dispersion beyond noise is detected (``tau^2 = 0``) every posterior
+        equals the mean and ties are broken by raw Sharpe.
+    eb_sharpe_minus_turnover
+        ``eb_sharpe`` then the turnover penalty.
     """
     if mode not in {
         "sharpe",
         "shrunk_sharpe",
         "sharpe_minus_turnover",
         "shrunk_sharpe_minus_turnover",
+        "eb_sharpe",
+        "eb_sharpe_minus_turnover",
     }:
         raise ValueError(f"unknown walk-forward score mode: {mode!r}")
     w = np.asarray(net_window, dtype=float)
@@ -204,7 +246,9 @@ def trailing_scores(
     if mode in ("shrunk_sharpe", "shrunk_sharpe_minus_turnover"):
         intensity = float(np.clip(shrink_intensity, 0.0, 1.0))
         srs = (1.0 - intensity) * srs + intensity * float(srs.mean())
-    if mode in ("sharpe_minus_turnover", "shrunk_sharpe_minus_turnover"):
+    if mode in ("eb_sharpe", "eb_sharpe_minus_turnover"):
+        srs = empirical_bayes_sharpes(w)
+    if mode in ("sharpe_minus_turnover", "shrunk_sharpe_minus_turnover", "eb_sharpe_minus_turnover"):
         if positions_window is None:
             raise ValueError("positions_window required for turnover-penalised modes")
         P = np.asarray(positions_window, dtype=float)
