@@ -115,3 +115,40 @@ def test_implied_effective_trials_inverts_closed_form():
     assert implied_effective_trials(-0.01, var) == 1.0
     with pytest.raises(ValueError):
         implied_effective_trials(0.1, 0.0)
+
+
+def test_selection_modes_raw_unchanged_and_effective_n_lowers_hurdle():
+    rng = np.random.default_rng(3)
+    base = rng.normal(0, 0.01, size=(1500, 5))
+    # 40 trials that are 8 noisy copies of 5 underlying series -> N_eff << 40
+    M = np.hstack([base + rng.normal(0, 0.002, size=base.shape) for _ in range(8)])
+    raw = deflated_sharpe_for_selection(M, sr_variance="null")
+    raw2 = deflated_sharpe_for_selection(M, sr_variance="null", n_trials_mode="raw")
+    assert raw.dsr == raw2.dsr and raw.n_effective_trials == 40.0
+    pr = deflated_sharpe_for_selection(M, sr_variance="null", n_trials_mode="participation")
+    sim = deflated_sharpe_for_selection(M, sr_variance="null", n_trials_mode="simulated")
+    assert pr.n_effective_trials < 10 and sim.n_effective_trials < 15
+    assert sim.expected_max_sharpe < raw.expected_max_sharpe
+    assert sim.dsr >= raw.dsr and pr.dsr >= raw.dsr
+    again = deflated_sharpe_for_selection(M, sr_variance="null", n_trials_mode="simulated")
+    assert again.dsr == sim.dsr  # seeded
+    with pytest.raises(ValueError):
+        deflated_sharpe_for_selection(M, n_trials_mode="bogus")
+
+
+def test_max_sharpe_pvalue_null_vs_edge():
+    from purged_cv.sharpe import max_sharpe_pvalue
+
+    # calibration on iid nulls: ~5% of p-values below 0.05, mean ~0.5
+    ps = np.array(
+        [
+            max_sharpe_pvalue(np.random.default_rng(s).normal(0, 0.01, size=(2000, 10)), n_sims=2000)
+            for s in range(100)
+        ]
+    )
+    assert 0.01 <= (ps < 0.05).mean() <= 0.10
+    assert ps.mean() == pytest.approx(0.5, abs=0.08)
+    null = np.random.default_rng(5).normal(0, 0.01, size=(2000, 10))
+    edge = null.copy()
+    edge[:, 3] += 0.002  # per-period SR ~0.2 -> t ~ 9
+    assert max_sharpe_pvalue(edge, n_sims=5000) < 0.001
