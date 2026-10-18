@@ -4,10 +4,20 @@ from purged_cv.split import PurgedKFold
 from purged_cv.cpcv import CombinatorialPurgedKFold
 from purged_cv.embargo import embargo_train_indices, purge_train_indices
 from purged_cv.overfitting import probability_of_backtest_overfitting
-from purged_cv.sharpe import deflated_sharpe_ratio, probabilistic_sharpe_ratio
+from purged_cv.sharpe import (
+    deflated_sharpe_for_selection,
+    deflated_sharpe_ratio,
+    effective_trials_participation,
+    implied_effective_trials,
+    max_sharpe_pvalue,
+    null_max_sharpe_draws,
+    probabilistic_sharpe_ratio,
+)
+from purged_cv.calibration import calibration_table
 from purged_cv.metrics import compare_naive_vs_purged_cv
 from purged_cv.data import make_synthetic_ar_dataset, make_horizon_labels
 from purged_cv.selection import (
+    empirical_bayes_sharpes,
     expanding_vol,
     net_returns_with_impact,
     run_selector_ablation,
@@ -23,6 +33,13 @@ __all__ = [
     "compare_naive_vs_purged_cv",
     "probability_of_backtest_overfitting",
     "deflated_sharpe_ratio",
+    "deflated_sharpe_for_selection",
+    "effective_trials_participation",
+    "implied_effective_trials",
+    "max_sharpe_pvalue",
+    "null_max_sharpe_draws",
+    "calibration_table",
+    "empirical_bayes_sharpes",
     "probabilistic_sharpe_ratio",
     "make_synthetic_ar_dataset",
     "make_horizon_labels",

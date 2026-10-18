@@ -40,3 +40,18 @@ def test_calibration_script_builds_small_report_offline():
     rep = mod.build(args)
     assert len(rep["rows"]) == 1
     assert "Selection-hurdle calibration" in mod.summarise(rep)
+
+
+def test_slice4_helpers_are_exported_from_package_root():
+    import purged_cv
+
+    for name in (
+        "deflated_sharpe_for_selection",
+        "effective_trials_participation",
+        "implied_effective_trials",
+        "max_sharpe_pvalue",
+        "null_max_sharpe_draws",
+        "calibration_table",
+        "empirical_bayes_sharpes",
+    ):
+        assert name in purged_cv.__all__ and callable(getattr(purged_cv, name))
