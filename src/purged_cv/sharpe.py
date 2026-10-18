@@ -204,6 +204,8 @@ class SelectionReport:
     dsr: float
     skew: float
     kurtosis: float
+    n_trials_mode: str = "raw"
+    n_effective_trials: float = float("nan")
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -213,6 +215,9 @@ def deflated_sharpe_for_selection(
     trial_returns: np.ndarray,
     periods_per_year: float = 252.0,
     sr_variance: str = "cross_sectional",
+    n_trials_mode: str = "raw",
+    n_sims: int = 4000,
+    seed: int = 0,
 ) -> SelectionReport:
     """Select the max-Sharpe trial and deflate it by the number of trials.
 
@@ -227,8 +232,19 @@ def deflated_sharpe_for_selection(
       ``1 / (T - 1)``. Asks "could the best of N skill-less trials look this
       good?" without letting real dispersion inflate the hurdle.
 
-    Skew/kurtosis come from the selected series. Trials are treated as
-    independent; correlated trials overstate N, which is conservative.
+    ``n_trials_mode`` chooses how many trials the hurdle counts:
+
+    * ``"raw"`` (default, unchanged): every column is an independent trial.
+      Correlated trials overstate N, which is conservative.
+    * ``"participation"``: eigenvalue participation ratio of the trial
+      correlation. Counts directions, so it is anti-conservative on mirrored
+      grids (see :func:`effective_trials_participation`).
+    * ``"simulated"``: E[max SR] is the mean of
+      :func:`null_max_sharpe_draws` (zero-skill Sharpes with the grid's own
+      correlation, scaled by the chosen variance); the reported N is the
+      implied effective N. Seeded, so results are reproducible.
+
+    Skew/kurtosis come from the selected series.
     """
     M = np.asarray(trial_returns, dtype=float)
     if M.ndim != 2 or M.shape[1] < 2:
@@ -245,6 +261,17 @@ def deflated_sharpe_for_selection(
         var_sr = 1.0 / (n - 1.0)
     else:
         raise ValueError("sr_variance must be 'cross_sectional' or 'null'")
+    if n_trials_mode == "raw":
+        n_eff = float(M.shape[1])
+        sr0 = expected_max_sharpe(M.shape[1], var_sr)
+    elif n_trials_mode == "participation":
+        n_eff = effective_trials_participation(M)
+        sr0 = _expected_max_sharpe_continuous(n_eff, var_sr) if n_eff > 1.0 + 1e-9 else 0.0
+    elif n_trials_mode == "simulated":
+        sr0 = float(null_max_sharpe_draws(M, var_sr, n_sims=n_sims, seed=seed).mean())
+        n_eff = implied_effective_trials(sr0, var_sr) if var_sr > 0 else 1.0
+    else:
+        raise ValueError("n_trials_mode must be 'raw', 'participation' or 'simulated'")
     return SelectionReport(
         best_index=b,
         n_trials=M.shape[1],
@@ -252,9 +279,30 @@ def deflated_sharpe_for_selection(
         best_sharpe=float(srs[b]),
         best_sharpe_annualised=float(srs[b] * np.sqrt(periods_per_year)),
         trials_sr_std=float(np.sqrt(var_sr)),
-        expected_max_sharpe=expected_max_sharpe(M.shape[1], var_sr),
+        expected_max_sharpe=sr0,
         psr_vs_zero=probabilistic_sharpe_ratio(srs[b], n, 0.0, g3, g4),
-        dsr=deflated_sharpe_ratio(srs[b], n, M.shape[1], var_sr, g3, g4),
+        dsr=probabilistic_sharpe_ratio(srs[b], n, sr0, g3, g4),
         skew=g3,
         kurtosis=g4,
+        n_trials_mode=n_trials_mode,
+        n_effective_trials=n_eff,
     )
+
+
+def max_sharpe_pvalue(
+    trial_returns: np.ndarray,
+    n_sims: int = 20000,
+    seed: int = 0,
+) -> float:
+    """Max-statistic p-value: P(best zero-skill Sharpe >= observed best Sharpe).
+
+    Uses :func:`null_max_sharpe_draws` with the null sampling variance, so it
+    is a direct test of "could the best of these correlated trials look this
+    good by luck?" (a Gaussian reality-check style test). Unlike DSR it is
+    calibrated against the whole null distribution of the max, not just its
+    mean; normal sampling error is assumed (no skew/kurtosis adjustment).
+    """
+    M = np.asarray(trial_returns, dtype=float)
+    srs = np.array([sharpe_ratio(M[:, j]) for j in range(M.shape[1])])
+    draws = null_max_sharpe_draws(M, None, n_sims=n_sims, seed=seed)
+    return float((1 + np.sum(draws >= srs.max())) / (1 + len(draws)))
