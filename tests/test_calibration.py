@@ -24,3 +24,19 @@ def test_null_false_positives_stay_low_and_edge_power_is_higher():
     # correlation-aware hurdles are never stricter than counting 40 independent trials
     assert edge["dsr_simulated"] >= edge["dsr_raw"]
     assert edge["dsr_participation"] >= edge["dsr_simulated"]
+
+
+def test_calibration_script_builds_small_report_offline():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "run_dsr_calibration.py"
+    spec = importlib.util.spec_from_file_location("run_dsr_calibration", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    args = mod.parse_args(
+        ["--n-seeds", "2", "--n-bars", "700", "--phis", "0.0", "--cost-bps", "2", "--n-sims", "300", "--no-write"]
+    )
+    rep = mod.build(args)
+    assert len(rep["rows"]) == 1
+    assert "Selection-hurdle calibration" in mod.summarise(rep)
