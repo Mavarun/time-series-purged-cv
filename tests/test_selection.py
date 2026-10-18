@@ -213,3 +213,42 @@ def test_uniform_shrinkage_cannot_change_walk_forward_picks():
         )
         np.testing.assert_array_equal(wf["chosen"], base["chosen"])
         np.testing.assert_allclose(wf["oos_net"], base["oos_net"])
+
+
+def test_empirical_bayes_shrinks_fat_tailed_trial_more():
+    from purged_cv.selection import empirical_bayes_sharpes
+
+    rng = np.random.default_rng(11)
+    T = 500
+    cols = [rng.normal(mu, 0.01, size=T) for mu in np.linspace(-0.002, 0.002, 9)]
+    g = rng.normal(0, 1, size=T)
+    half = np.where(rng.random(T // 2) < 0.03, rng.standard_t(2, size=T // 2), 0.0)
+    fat = rng.permutation(np.concatenate([half, -half]))  # rare, fat-tailed, zero skew
+    target_sr = 0.15
+    G = (g - g.mean()) / g.std(ddof=1) + target_sr
+    F = (fat - fat.mean()) / fat.std(ddof=1) + target_sr
+    W = np.column_stack(cols + [G * 0.01, F * 0.01])
+    raw = W.mean(0) / W.std(0, ddof=1)
+    np.testing.assert_allclose(raw[-1], raw[-2], rtol=1e-9)
+    post = empirical_bayes_sharpes(W)
+    assert post[-1] < post[-2] < raw[-2]  # both shrink; the fat-tailed one more
+    # cross-section dispersion far below sampling noise (se ~ 0.045): tau^2 = 0,
+    # every posterior collapses to the mean, ties broken by raw Sharpe
+    z = rng.normal(size=(T, 6))
+    z = (z - z.mean(0)) / z.std(0, ddof=1)
+    noise = 0.01 * (z + np.array([0.001, -0.002, 0.0, 0.003, -0.001, 0.002]))
+    pn = empirical_bayes_sharpes(noise)
+    assert np.ptp(pn) < 1e-6
+    assert int(np.argmax(pn)) == int(np.argmax(noise.mean(0) / noise.std(0, ddof=1)))
+    # never-trading rule gets no weight
+    with_flat = np.column_stack([W, np.zeros(T)])
+    assert np.isfinite(empirical_bayes_sharpes(with_flat)).all()
+
+
+def test_eb_modes_run_in_walk_forward():
+    r = make_ar_returns(1200, phi=0.1, seed=3)
+    P = rule_positions(r, default_rule_grid())
+    for mode in ("eb_sharpe", "eb_sharpe_minus_turnover"):
+        wf = walk_forward_select(r, P, cost_bps=2.0, train_window=504, step=63, mode=mode)
+        assert wf["mode"] == mode and len(wf["oos_net"]) == 1200 - 504
+        np.testing.assert_allclose(wf["oos_net"], wf["oos_gross"] - wf["oos_costs"])
