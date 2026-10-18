@@ -66,38 +66,54 @@ def summarise(report: dict) -> str:
     # group by (phi, cost, impact)
     from collections import defaultdict
 
+    modes = [
+        ("sharpe", "sharpe"),
+        ("shrunk_sharpe", "shrunk"),
+        ("eb_sharpe", "EB"),
+        ("sharpe_minus_turnover", "sharpe-turnover"),
+        ("shrunk_sharpe_minus_turnover", "shrunk-turnover"),
+        ("eb_sharpe_minus_turnover", "EB-turnover"),
+    ]
     bucket: dict[tuple, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     switch_bucket: dict[tuple, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    rerank_bucket: dict[tuple, list[float]] = defaultdict(list)
     for run in report["runs"]:
-        for ic, modes in run["by_impact"].items():
+        for ic, by_mode in run["by_impact"].items():
             key = (run["phi"], run["cost_bps"], float(ic))
-            for mode, m in modes.items():
+            for mode, m in by_mode.items():
                 bucket[key][mode].append(m["oos_net_sharpe_ann"])
                 switch_bucket[key][mode].append(m["n_switches"])
+            if "eb_sharpe" in by_mode and "chosen" in by_mode["eb_sharpe"]:
+                a = np.asarray(by_mode["sharpe"]["chosen"])
+                b = np.asarray(by_mode["eb_sharpe"]["chosen"])
+                rerank_bucket[key].append(float(np.mean(a != b)))
 
-    lines.append("| phi | cost bps | impact | sharpe | shrunk | sharpe-turnover | shrunk-turnover |")
-    lines.append("| ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    present = [(k, lab) for k, lab in modes if any(k in m for m in bucket.values())]
+    header = "| phi | cost bps | impact | " + " | ".join(lab for _, lab in present) + " |"
+    rule = "| ---: | ---: | ---: | " + " | ".join("---:" for _ in present) + " |"
+    lines += [header, rule]
     for key in sorted(bucket):
         phi, cost, ic = key
         m = bucket[key]
-        lines.append(
-            f"| {phi:.2f} | {cost:g} | {ic:g} | "
-            f"{np.mean(m['sharpe']):.2f} | {np.mean(m['shrunk_sharpe']):.2f} | "
-            f"{np.mean(m['sharpe_minus_turnover']):.2f} | "
-            f"{np.mean(m['shrunk_sharpe_minus_turnover']):.2f} |"
-        )
-    lines += ["", "Mean walk-forward switches (lower is less churn):", ""]
-    lines.append("| phi | cost bps | impact | sharpe | shrunk | sharpe-turnover | shrunk-turnover |")
-    lines.append("| ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+        cells = " | ".join(f"{np.mean(m[k]):.2f}" for k, _ in present)
+        lines.append(f"| {phi:.2f} | {cost:g} | {ic:g} | {cells} |")
+    lines += ["", "Mean walk-forward switches (lower is less churn):", "", header, rule]
     for key in sorted(switch_bucket):
         phi, cost, ic = key
         m = switch_bucket[key]
-        lines.append(
-            f"| {phi:.2f} | {cost:g} | {ic:g} | "
-            f"{np.mean(m['sharpe']):.1f} | {np.mean(m['shrunk_sharpe']):.1f} | "
-            f"{np.mean(m['sharpe_minus_turnover']):.1f} | "
-            f"{np.mean(m['shrunk_sharpe_minus_turnover']):.1f} |"
-        )
+        cells = " | ".join(f"{np.mean(m[k]):.1f}" for k, _ in present)
+        lines.append(f"| {phi:.2f} | {cost:g} | {ic:g} | {cells} |")
+    if rerank_bucket:
+        lines += [
+            "",
+            "Share of walk-forward windows where EB picks a different trial than plain Sharpe:",
+            "",
+            "| phi | cost bps | impact | EB re-rank share |",
+            "| ---: | ---: | ---: | ---: |",
+        ]
+        for key in sorted(rerank_bucket):
+            phi, cost, ic = key
+            lines.append(f"| {phi:.2f} | {cost:g} | {ic:g} | {np.mean(rerank_bucket[key]):.3f} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -113,6 +129,7 @@ def parse_args(argv=None):
     ap.add_argument("--impact-coefs", type=float, nargs="+", default=[0.0, 0.0005, 0.001])
     ap.add_argument("--shrink-intensity", type=float, default=0.5)
     ap.add_argument("--turnover-penalty", type=float, default=5.0)
+    ap.add_argument("--out-stem", default="selector_ablation", help="artifact file stem under artifacts/")
     ap.add_argument("--json", action="store_true")
     return ap.parse_args(argv)
 
@@ -123,8 +140,8 @@ def main(argv=None) -> int:
     md = summarise(report)
     art = ROOT / "artifacts"
     art.mkdir(exist_ok=True)
-    (art / "selector_ablation.json").write_text(json.dumps(report, indent=2) + "\n")
-    (art / "selector_ablation.md").write_text(md)
+    (art / f"{args.out_stem}.json").write_text(json.dumps(report, indent=2) + "\n")
+    (art / f"{args.out_stem}.md").write_text(md)
     if args.json:
         print(json.dumps(report, indent=2))
     else:
