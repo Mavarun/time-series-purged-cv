@@ -179,7 +179,11 @@ def trailing_scores(
     shrunk_sharpe
         James-Stein shrink each trial's Sharpe toward the cross-sectional mean:
         ``(1 - intensity) * SR_j + intensity * mean(SR)``. ``intensity`` in
-        [0, 1]; 0 recovers plain Sharpe.
+        [0, 1]; 0 recovers plain Sharpe. Because every trial gets the same
+        intensity this is a positive affine map of the Sharpes, so for
+        ``intensity < 1`` it **never changes the argmax** (walk-forward picks
+        are identical to ``sharpe``); it only matters when combined with the
+        turnover penalty, where it rescales Sharpe against the penalty.
     sharpe_minus_turnover
         ``SR_j - turnover_penalty * mean(|delta position_j|)`` over the window.
         Requires ``positions_window``.

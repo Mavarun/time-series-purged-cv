@@ -198,3 +198,18 @@ def test_selector_ablation_script_builds_offline_report():
     assert "runs" in rep and len(rep["runs"]) == 1
     md = mod.summarise(rep)
     assert "Walk-forward selector ablation" in md
+
+
+def test_uniform_shrinkage_cannot_change_walk_forward_picks():
+    # ``(1 - a) * SR_j + a * mean(SR)`` is a positive affine map of SR_j for
+    # a < 1, so argmax is unchanged: the slice-3 "shrunk" column equals the
+    # plain column by construction, not by chance. Pin it for several a.
+    r = make_ar_returns(1500, phi=0.05, seed=7)
+    P = rule_positions(r, default_rule_grid())
+    base = walk_forward_select(r, P, cost_bps=2.0, train_window=504, step=63, mode="sharpe")
+    for a in (0.1, 0.5, 0.9, 0.99):
+        wf = walk_forward_select(
+            r, P, cost_bps=2.0, train_window=504, step=63, mode="shrunk_sharpe", shrink_intensity=a
+        )
+        np.testing.assert_array_equal(wf["chosen"], base["chosen"])
+        np.testing.assert_allclose(wf["oos_net"], base["oos_net"])
