@@ -55,3 +55,24 @@ def test_slice4_helpers_are_exported_from_package_root():
         "empirical_bayes_sharpes",
     ):
         assert name in purged_cv.__all__ and callable(getattr(purged_cv, name))
+
+
+def test_default_output_is_unchanged_and_rc_is_opt_in():
+    base = selection_tests_one_seed(0.0, seed=1, cost_bps=2.0, n=800, n_sims=300)
+    assert "rc_p" not in base
+    rc = selection_tests_one_seed(0.0, seed=1, cost_bps=2.0, n=800, n_sims=300, with_rc=True, n_boot=99)
+    assert {k: v for k, v in rc.items() if k != "rc_p"} == base
+    assert 0.0 < rc["rc_p"] <= 1.0
+
+
+def test_garch_innovations_and_rc_rates_are_reported():
+    rows = calibration_table(phis=(0.0,), seeds=range(4), cost_bps=(2.0,), n=800, n_sims=300,
+                             innovations="garch", with_rc=True, n_boot=99)
+    assert "rc_p" in rows[0] and "rc_p_se" in rows[0] and 0.0 <= rows[0]["rc_p"] <= 1.0
+
+
+def test_unknown_innovations_are_rejected():
+    import pytest
+
+    with pytest.raises(ValueError):
+        selection_tests_one_seed(0.0, seed=0, innovations="cauchy")
