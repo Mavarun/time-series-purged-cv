@@ -56,6 +56,46 @@ def make_ar_returns(n: int = 2520, phi: float = 0.0, vol: float = 0.01, seed: in
     return r
 
 
+def make_garch_ar_returns(
+    n: int = 2520,
+    phi: float = 0.0,
+    vol: float = 0.01,
+    seed: int = 0,
+    alpha: float = 0.08,
+    beta: float = 0.90,
+    nu: float = 5.0,
+    burn: int = 500,
+) -> np.ndarray:
+    """AR(1) returns with GARCH(1, 1) Student-t innovations, unconditional std ``vol``.
+
+    ``e_t = sigma_t z_t``, ``z_t`` Student-t(``nu``) scaled to unit variance,
+    ``sigma_t^2 = omega + alpha e_{t-1}^2 + beta sigma_{t-1}^2`` with ``omega``
+    set so the unconditional return variance is ``vol^2`` (same as
+    :func:`make_ar_returns`). Volatility clustering plus fat tails: the case
+    where an iid-normal Sharpe null can be miscalibrated. Defaults are typical
+    daily equity-index fits, fixed a priori.
+    """
+    if not -1.0 < phi < 1.0:
+        raise ValueError("phi must be in (-1, 1)")
+    if alpha < 0 or beta < 0 or alpha + beta >= 1.0:
+        raise ValueError("need alpha, beta >= 0 and alpha + beta < 1")
+    if nu <= 2.0:
+        raise ValueError("nu must be > 2 for a finite variance")
+    rng = np.random.default_rng(seed)
+    var_e = vol**2 * (1.0 - phi**2)
+    omega = var_e * (1.0 - alpha - beta)
+    m = n + burn
+    z = rng.standard_t(nu, size=m) * np.sqrt((nu - 2.0) / nu)
+    r = np.empty(m)
+    s2, e_prev, r_prev = var_e, 0.0, 0.0
+    for t in range(m):
+        s2 = omega + alpha * e_prev**2 + beta * s2
+        e_prev = np.sqrt(s2) * z[t]
+        r_prev = phi * r_prev + e_prev
+        r[t] = r_prev
+    return r[burn:]
+
+
 def default_rule_grid(
     lookbacks=(1, 2, 3, 5, 8, 13, 21, 34, 55, 89),
     thresholds=(0.0, 0.5),
