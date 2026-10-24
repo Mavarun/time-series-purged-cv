@@ -169,6 +169,43 @@ Seed-1 diagnostics (`run_overfitting_diagnostics.py`): null at 2 bps has DSR 0.2
 - Opt-in: `n_trials_mode="simulated"` / `"participation"`, `max_sharpe_pvalue`, and `eb_sharpe*` walk-forward modes.
 - Recommended hurdle for a correlated grid: max-stat p-value or simulated-N DSR. Not recommended: participation-N DSR (slightly anti-conservative), and the turnover penalty when candidates are high-turnover.
 
+## Slice 5 (2026-10-24): stationary-bootstrap reality check, GARCH-t returns
+
+The slice-4 max-statistic test draws the null Sharpes from `N(0, C / (T-1))`, which assumes iid-normal bars. Real daily returns cluster in volatility and have fat tails. This slice asks whether that assumption miscalibrates the recommended hurdle, and whether a resampling null does better.
+
+### What was added
+
+- **Stationary bootstrap** (`bootstrap.py`, Politis & Romano 1994): resample whole rows of the `T x 40` trial-return matrix in wrap-around blocks with geometric lengths (mean 10 bars, fixed a priori). This keeps the serial dependence and the cross-trial correlation.
+- **White's reality check** (`reality_check_pvalue`): statistic `max_j sqrt(T) SR_j`, with bootstrap draws re-centred on each trial's own Sharpe (least-favourable null). `p = (1 + #{V* >= V}) / (1 + B)`.
+- **GARCH(1,1) Student-t(5) returns** (`make_garch_ar_returns`): alpha 0.08, beta 0.90, the same unconditional vol and AR(1) coefficient as `make_ar_returns`, with parameters fixed a priori.
+- `calibration_table(..., innovations="garch", with_rc=True)`. Both are opt-in, and the defaults reproduce every slice-4 number (a test checks the normal rows cell by cell).
+
+### Results (`python scripts/run_rc_calibration.py`, 200 seeds, n=2520, 499 bootstrap draws, ~3 min on 8 cores)
+
+| returns | phi | cost bps | DSR raw N=40 | DSR simulated N | max-stat p<0.05 | reality check p<0.05 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| normal | 0.00 | 0 | 0.000 | 0.010 | 0.050 | 0.055 |
+| normal | 0.00 | 2 | 0.000 | 0.005 | 0.035 | 0.025 |
+| normal | 0.10 | 2 | 0.430 | 0.545 | **0.785** | 0.730 |
+| garch-t | 0.00 | 0 | 0.005 | 0.005 | 0.060 | 0.055 |
+| garch-t | 0.00 | 2 | 0.000 | 0.005 | 0.020 | 0.015 |
+| garch-t | 0.10 | 2 | 0.200 | 0.315 | **0.645** | 0.625 |
+
+(Full table, with participation-N DSR, gross edge rows and binomial s.e. of about 0.01-0.035, is in `artifacts/rc_calibration.md`.)
+
+**Reading (honest):**
+
+- **No gain from the bootstrap.** On the gross null the reality check rejects 5.5% under both return types, while the Gaussian max-stat rejects 5.0% (normal) and 6.0% (GARCH-t). The differences are within one s.e. (about 0.016). With 2,520 bars and these rule returns, the iid-normal Sharpe null is already adequate.
+- **The bootstrap has slightly less power** on the phi = 0.1 edge at 2 bps: 0.730 vs 0.785 (normal) and 0.625 vs 0.645 (GARCH-t). These are within about 1-2 s.e. but the same sign in every edge cell, so the max-stat p-value stays the recommended hurdle.
+- **GARCH-t costs every hurdle power.** At 2 bps the edge is detected 0.645 vs 0.785 of the time by max-stat and 0.200 vs 0.430 by raw DSR. Volatility clustering makes the momentum rule's realised Sharpe noisier at the same unconditional vol.
+- Participation-N DSR becomes more anti-conservative under GARCH-t: 0.085 false positives on the gross null, against 0.060 under normal returns. That is one more reason not to use it as a hurdle.
+- The block length (10) was not tuned, and Hansen's SPA refinement is not implemented. Neither changes the conclusion that the bootstrap null adds nothing measurable here.
+
+### What ships
+
+- Opt-in only: `reality_check_pvalue`, `stationary_bootstrap_indices`, `make_garch_ar_returns` and the calibration flags. The default outputs are unchanged.
+- Recommended hurdle unchanged: the Gaussian max-statistic p-value (or simulated-N DSR). The bootstrap check is a robustness cross-check when the returns are far from the GARCH-t case tested here, for example at much shorter samples. That case is not tested.
+
 ## How to run
 
 ```bash
@@ -182,6 +219,7 @@ python scripts/run_overfitting_diagnostics.py          # CPCV / PBO / DSR / leak
 python scripts/run_overfitting_diagnostics.py --json
 python scripts/run_dsr_calibration.py                  # DSR effective-N / max-stat calibration (~1.5 min)
 python scripts/run_selector_ablation.py                # walk-forward selector ablation (incl. EB)
+python scripts/run_rc_calibration.py                   # reality check vs max-stat, normal vs GARCH-t (~3 min, 8 cores)
 # optional market data (network; cite Yahoo Finance / yfinance):
 python scripts/run_purged_cv_slice.py --yfinance --ticker SPY
 ```
@@ -196,6 +234,7 @@ src/purged_cv/
   sharpe.py     # PSR, deflated Sharpe, min track record length,
                 # effective N of correlated trials, max-statistic p-value
   calibration.py# null false-positive / edge power of selection hurdles
+  bootstrap.py  # stationary bootstrap, White's reality check p-value
   leakage.py    # naive vs purged vs CPCV on autocorrelated null labels
   selection.py  # best-of-N rule selection with costs: DSR, PBO, walk-forward,
                 # causal vol, shrinkage / EB / turnover scores, sqrt impact
@@ -208,6 +247,7 @@ scripts/run_purged_cv_slice.py
 scripts/run_overfitting_diagnostics.py
 scripts/run_selector_ablation.py
 scripts/run_dsr_calibration.py
+scripts/run_rc_calibration.py
 tests/
 .github/workflows/tests.yml   # offline pytest on 3.11 / 3.12
 ```
@@ -217,6 +257,7 @@ tests/
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
 - Embargo length is a crude fraction of the sample span, not an asset-specific correlation time.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
+- Hurdle calibration covers iid-normal and GARCH(1,1)-t AR(1) returns at n = 2520 only; shorter samples, regime switches and real return panels are untested.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
 - Gap on honest lag features is small; the large gap is easiest to see on the engineered-leakage fixture.
 - No claim of production accuracy or live PnL.
@@ -227,6 +268,8 @@ tests/
 - Bailey, D. H., Borwein, J. M., López de Prado, M., Zhu, Q. J. (2017). The Probability of Backtest Overfitting. *Journal of Computational Finance* 20(4).
 - Bailey, D. H., López de Prado, M. (2014). The Deflated Sharpe Ratio. *Journal of Portfolio Management* 40(5).
 - Bailey, D. H., López de Prado, M. (2012). The Sharpe Ratio Efficient Frontier. *Journal of Risk* 15(2).
-- White, H. (2000). A Reality Check for Data Snooping. *Econometrica* 68(5). (Max-statistic idea; here a Gaussian approximation, not the bootstrap.)
+- White, H. (2000). A Reality Check for Data Snooping. *Econometrica* 68(5). (Max-statistic test: Gaussian approximation in slice 4, stationary bootstrap in slice 5.)
+- Politis, D. N., Romano, J. P. (1994). The Stationary Bootstrap. *JASA* 89(428).
+- Bollerslev, T. (1986). Generalized Autoregressive Conditional Heteroskedasticity. *Journal of Econometrics* 31(3).
 - Efron, B., Morris, C. (1973). Stein's estimation rule and its competitors: an empirical Bayes approach. *JASA* 68(341).
 - Synthetic data: in-process AR(1). Optional bars: Yahoo Finance via `yfinance`.
