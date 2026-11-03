@@ -206,6 +206,99 @@ The slice-4 max-statistic test draws the null Sharpes from `N(0, C / (T-1))`, wh
 - Opt-in only: `reality_check_pvalue`, `stationary_bootstrap_indices`, `make_garch_ar_returns` and the calibration flags. The default outputs are unchanged.
 - Recommended hurdle unchanged: the Gaussian max-statistic p-value (or simulated-N DSR). The bootstrap check is a robustness cross-check when the returns are far from the GARCH-t case tested here, for example at much shorter samples. That case is not tested.
 
+## Slice 6 (2026-11-03): the hurdles at one to ten years of data, and under volatility regimes
+
+Slices 4 and 5 calibrated every hurdle at n = 2520 bars only, and listed shorter samples and regime switching
+as untested. This slice runs the same 40-rule grid, 2 bps cost and hurdles (DSR raw / participation-N /
+simulated-N, Gaussian max-statistic p, White's reality check with the stationary bootstrap, mean block 10,
+499 draws, all fixed a priori) at n in {252, 504, 1260, 2520} on iid-normal, GARCH(1,1)-t and a new
+Markov-volatility-regime AR(1) (`make_regime_ar_returns`: two states with shock-std multipliers 0.5 / 1.5
+rescaled to the same unconditional vol, mean regime length 100 bars). 300 fresh seeds per cell (5000-5299,
+disjoint from the 0-199 of slices 4 and 5). `phi = 0` rows are false-positive rates (nominal 5%, +-1.3 points
+of binomial s.e. at 300 seeds); `phi = 0.1` rows are power. Reproduce with
+`python scripts/run_short_sample_calibration.py` (~5-9 min on 8 cores; `--n-seeds`, `--n-bars` to shrink);
+artifacts in `artifacts/short_sample_calibration.{json,md}`. `calibration.selection_tests_one_seed` now accepts
+`innovations="regime"` and refuses a sample with fewer than 60 scored bars after the 90-bar warm-up.
+
+### Results (share of series passing, 300 seeds per cell)
+
+False positives (`phi = 0`, truth: no rule has an edge):
+
+| returns | bars | DSR participation | max-stat p<0.05 | reality check p<0.05 | DSR simulated |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| normal | 252 | 0.077 | 0.053 | 0.063 | 0.017 |
+| normal | 504 | 0.070 | 0.040 | 0.053 | 0.003 |
+| normal | 1260 | 0.063 | 0.057 | 0.050 | 0.007 |
+| normal | 2520 | 0.030 | 0.020 | 0.023 | 0.003 |
+| GARCH-t | 252 | **0.103** | 0.043 | **0.070** | 0.007 |
+| GARCH-t | 504 | 0.063 | 0.020 | 0.023 | 0.000 |
+| GARCH-t | 1260 | 0.050 | 0.033 | 0.030 | 0.003 |
+| GARCH-t | 2520 | 0.043 | 0.040 | 0.037 | 0.010 |
+| vol regime | 252 | 0.070 | 0.033 | 0.037 | 0.010 |
+| vol regime | 504 | 0.050 | 0.027 | 0.020 | 0.000 |
+| vol regime | 1260 | 0.037 | 0.023 | 0.020 | 0.003 |
+| vol regime | 2520 | 0.040 | 0.013 | 0.017 | 0.000 |
+
+Power (`phi = 0.1`, a real lag-1 momentum edge in the grid):
+
+| returns | bars | DSR participation | max-stat p<0.05 | reality check p<0.05 | DSR simulated |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| normal | 252 | 0.137 | 0.103 | 0.077 | 0.033 |
+| normal | 504 | 0.233 | 0.187 | 0.117 | 0.043 |
+| normal | 1260 | 0.557 | 0.463 | 0.420 | 0.217 |
+| normal | 2520 | 0.843 | 0.813 | 0.763 | 0.527 |
+| GARCH-t | 252 | 0.147 | 0.093 | 0.077 | 0.023 |
+| GARCH-t | 504 | 0.203 | 0.123 | 0.077 | 0.033 |
+| GARCH-t | 1260 | 0.407 | 0.330 | 0.260 | 0.120 |
+| GARCH-t | 2520 | 0.657 | 0.607 | 0.557 | 0.317 |
+| vol regime | 252 | 0.163 | 0.110 | 0.070 | 0.023 |
+| vol regime | 504 | 0.213 | 0.127 | 0.090 | 0.020 |
+| vol regime | 1260 | 0.360 | 0.240 | 0.207 | 0.097 |
+| vol regime | 2520 | 0.707 | 0.637 | 0.593 | 0.343 |
+
+Reading:
+
+- **Short samples do not inflate the max-statistic test or the reality check.** Their false-positive rates
+  are 1.3-7.0% across all 12 null cells; they run higher at 252 bars (3.3-7.0%) than at 2520 (1.3-4.0%),
+  where the grid's 40 rules make both tests conservative, but never past 7%. The worry that hurdles tuned at
+  10 years break at 1 year did not materialise for these two.
+- **The participation-N DSR is the liberal hurdle at short n**: 7.7% (normal) and 10.3% (GARCH-t) at 252 bars
+  and 7.0% at 504 bars on normal returns, against 3-4% at 2520. It is the only hurdle above 7.0%.
+  Raw N = 40 and simulated-N DSR stay conservative (0-1.7% at 252 bars).
+- **The price of the clean null is power, and it is small at one year.** On a real phi = 0.1 edge the
+  max-statistic test finds it in 9-11% of 252-bar series (null: 3-5%), 12-19% at 504 bars, and only
+  reaches 46% (normal) / 33% (GARCH-t) / 24% (regime) at 1260 bars. One to two years of daily bars cannot
+  tell a phi = 0.1 lag-1 edge from the best of 40 noise rules.
+- **The reality check does not buy power here.** It is below the Gaussian max-statistic at every
+  phi = 0.1 cell with n >= 252 (for example 0.420 vs 0.463 at 1260 normal, 0.260 vs 0.330 at 1260 GARCH-t),
+  and at 252 bars GARCH-t its null rate (7.0%) is higher than the max-statistic's (4.3%). Slice 5's "matches
+  the null rate with slightly less power" holds at every length; the bootstrap's value is the tail model, not
+  extra detection.
+- **Volatility regimes cost power but do not break the nulls.** At 2520 bars max-stat power falls from 0.813
+  (normal) to 0.637 (regime) and 0.607 (GARCH-t), with null rates 1.3-4.0%. A regime-switching vol is as
+  hard on a Sharpe test as clustering plus fat tails, even with Gaussian shocks.
+
+### What the tests check
+
+- `make_regime_ar_returns`: unconditional std equals `vol`, variance-mixture kurtosis > 3.3, volatility
+  clusters while returns are uncorrelated at phi = 0, the AR coefficient is kept, equal multipliers reduce to
+  constant-vol moments, regime lengths follow `p_stay`, seeded, validated.
+- Calibration: `"regime"` is registered and runs end to end with `rc_p`, same seed gives the same numbers for
+  every innovation type, the default path is unchanged, a sample under the scored-bar floor is rejected.
+- Artifact: 24 cells, seeds disjoint from slices 4-5, null control for max-stat and reality check at every n
+  (< 9%), max-stat power strictly rising in n and < 15% at 252 bars, participation DSR above max-stat on the
+  252-bar nulls.
+
+### Weaknesses of this slice
+
+- 300 seeds give a +-1.3 point s.e. on a 5% rate and +-2.9 points on a 50% rate, so the 0.01-0.03
+  differences between hurdles in single cells are noise; only the pattern across cells is evidence.
+- One edge (phi = 0.1 lag-1 momentum), one grid, one cost (2 bps), one regime shape (two vol states, no
+  change in phi). Regime-dependent autocorrelation, vol shocks that move with the signal and cross-asset
+  panels are untested.
+- Power is the full-sample hurdle's; walk-forward selection (slice 3) at these lengths is not evaluated.
+- Real daily return panels were not used (offline, seeded).
+
 ## How to run
 
 ```bash
@@ -257,7 +350,7 @@ tests/
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
 - Embargo length is a crude fraction of the sample span, not an asset-specific correlation time.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
-- Hurdle calibration covers iid-normal and GARCH(1,1)-t AR(1) returns at n = 2520 only; shorter samples, regime switches and real return panels are untested.
+- Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
 - Gap on honest lag features is small; the large gap is easiest to see on the engineered-leakage fixture.
 - No claim of production accuracy or live PnL.
