@@ -16,7 +16,11 @@ run net of costs, and the best full-sample trial is tested four ways:
 
 ``innovations="garch"`` draws AR(1) returns with GARCH(1, 1) Student-t
 shocks (``selection.make_garch_ar_returns``) at the same unconditional vol;
-the default ``"normal"`` reproduces the slice-4 tables.
+the default ``"normal"`` reproduces the slice-4 tables. ``"regime"`` draws
+Gaussian AR(1) returns with a two-state Markov volatility regime at the same
+unconditional vol (``selection.make_regime_ar_returns``); ``n`` may be shorter
+than the slice-4 default of 2520 (the 89-bar longest lookback warm-up is dropped,
+and fewer than ``MIN_SCORED_BARS`` scored bars is rejected).
 
 A trial "passes" when DSR > ``dsr_level`` (0.95) or ``max_p < alpha``.
 On ``phi = 0`` every pass is a false positive; on ``phi > 0`` the lag-1
@@ -34,6 +38,7 @@ from purged_cv.selection import (
     default_rule_grid,
     make_ar_returns,
     make_garch_ar_returns,
+    make_regime_ar_returns,
     net_returns_from_positions,
     rule_positions,
 )
@@ -41,7 +46,8 @@ from purged_cv.sharpe import deflated_sharpe_for_selection, max_sharpe_pvalue
 
 METHODS = ("dsr_raw", "dsr_participation", "dsr_simulated", "max_p")
 P_METHODS = ("max_p", "rc_p")
-INNOVATIONS = {"normal": make_ar_returns, "garch": make_garch_ar_returns}
+INNOVATIONS = {"normal": make_ar_returns, "garch": make_garch_ar_returns, "regime": make_regime_ar_returns}
+MIN_SCORED_BARS = 60
 
 
 def selection_tests_one_seed(
@@ -66,6 +72,8 @@ def selection_tests_one_seed(
     _, _, net = net_returns_from_positions(r, P, cost_bps)
     warm = max(L for L, _, _ in grid) + 1
     M = net[warm:]
+    if len(M) < MIN_SCORED_BARS:
+        raise ValueError(f"n={n} leaves {len(M)} scored bars after the {warm}-bar warm-up; need >= {MIN_SCORED_BARS}")
     out = {"phi": phi, "seed": seed, "cost_bps": cost_bps}
     for mode in ("raw", "participation", "simulated"):
         rep = deflated_sharpe_for_selection(M, sr_variance="null", n_trials_mode=mode, n_sims=n_sims, seed=seed)
