@@ -96,6 +96,48 @@ def make_garch_ar_returns(
     return r[burn:]
 
 
+def make_regime_ar_returns(
+    n: int = 2520,
+    phi: float = 0.0,
+    vol: float = 0.01,
+    seed: int = 0,
+    vol_mult: tuple[float, float] = (0.5, 1.5),
+    p_stay: float = 0.99,
+) -> np.ndarray:
+    """AR(1) returns whose shock volatility follows a two-state Markov chain.
+
+    State ``j`` scales the shock std by ``vol_mult[j]``; the chain stays put with
+    probability ``p_stay`` (mean regime length ``1 / (1 - p_stay)`` bars, 100 by
+    default) and starts from its symmetric stationary law. The multipliers are
+    rescaled so the unconditional return std is ``vol`` (same as
+    :func:`make_ar_returns`), so a sample that happens to sit in the high-vol
+    regime looks different from one that sits in the low-vol regime while the
+    full-sample population is unchanged. Gaussian shocks: this isolates regime
+    switching from fat tails (see :func:`make_garch_ar_returns` for those).
+    """
+    if not -1.0 < phi < 1.0:
+        raise ValueError("phi must be in (-1, 1)")
+    if not 0.0 < p_stay < 1.0:
+        raise ValueError("p_stay must be in (0, 1)")
+    if min(vol_mult) <= 0:
+        raise ValueError("vol_mult must be positive")
+    rng = np.random.default_rng(seed)
+    m = np.asarray(vol_mult, dtype=float)
+    m = m / np.sqrt(np.mean(m**2))  # unconditional variance = vol^2 (symmetric chain)
+    flips = rng.random(n) > p_stay
+    state = np.empty(n, dtype=int)
+    state[0] = int(rng.random() < 0.5)
+    for t in range(1, n):
+        state[t] = 1 - state[t - 1] if flips[t] else state[t - 1]
+    sigma_e = vol * np.sqrt(1.0 - phi**2) * m[state]
+    e = rng.normal(0.0, 1.0, size=n) * sigma_e
+    r = np.empty(n)
+    r[0] = rng.normal(0.0, vol * m[state[0]])
+    for t in range(1, n):
+        r[t] = phi * r[t - 1] + e[t]
+    return r
+
+
 def default_rule_grid(
     lookbacks=(1, 2, 3, 5, 8, 13, 21, 34, 55, 89),
     thresholds=(0.0, 0.5),
