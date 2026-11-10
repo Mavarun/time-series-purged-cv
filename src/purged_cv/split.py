@@ -8,7 +8,12 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import BaseCrossValidator
 
-from purged_cv.embargo import apply_purge_and_embargo, embargo_size
+from purged_cv.embargo import (
+    acf_embargo_bars,
+    apply_purge_and_embargo,
+    embargo_size,
+    pre_embargo_train_indices,
+)
 
 
 class PurgedKFold(BaseCrossValidator):
@@ -30,6 +35,14 @@ class PurgedKFold(BaseCrossValidator):
         test fold. 0 disables embargo. For integer times, embargo bars =
         ceil(embargo_pct * n_samples). For datetime, embargo =
         embargo_pct * (max_end - min_start).
+    embargo_bars :
+        Optional override (integer bar times only): a fixed bar count, or
+        ``"acf"`` to read it off the label autocorrelation of the ``y`` passed
+        to ``split`` (``embargo.acf_embargo_bars``; the label horizon is the
+        median ``end - start``). ``None`` (default) keeps ``embargo_pct``.
+    embargo_side :
+        ``"after"`` (default, AFML) or ``"both"``: also drop train rows whose
+        label ends within the embargo before the test fold (slice 7).
     """
 
     def __init__(
@@ -38,6 +51,8 @@ class PurgedKFold(BaseCrossValidator):
         label_start_times: pd.Series | np.ndarray | None = None,
         label_end_times: pd.Series | np.ndarray | None = None,
         embargo_pct: float = 0.01,
+        embargo_bars: int | str | None = None,
+        embargo_side: str = "after",
     ) -> None:
         if n_splits < 2:
             raise ValueError("n_splits must be >= 2")
@@ -47,6 +62,14 @@ class PurgedKFold(BaseCrossValidator):
         self.label_start_times = label_start_times
         self.label_end_times = label_end_times
         self.embargo_pct = embargo_pct
+        if embargo_bars is not None and embargo_bars != "acf" and (
+            not isinstance(embargo_bars, (int, np.integer)) or embargo_bars < 0
+        ):
+            raise ValueError("embargo_bars must be None, 'acf' or a non-negative int")
+        if embargo_side not in ("after", "both"):
+            raise ValueError("embargo_side must be 'after' or 'both'")
+        self.embargo_bars = embargo_bars
+        self.embargo_side = embargo_side
 
     def get_n_splits(self, X=None, y=None, groups=None) -> int:
         return self.n_splits
@@ -65,8 +88,15 @@ class PurgedKFold(BaseCrossValidator):
             raise ValueError("label start/end times must match n_samples")
         return starts, ends
 
-    def _embargo_td(self, starts: pd.Series, ends: pd.Series, n_samples: int):
-        return embargo_size(starts, ends, n_samples, self.embargo_pct)
+    def _embargo_td(self, starts: pd.Series, ends: pd.Series, n_samples: int, y=None):
+        if self.embargo_bars is None:
+            return embargo_size(starts, ends, n_samples, self.embargo_pct)
+        if self.embargo_bars == "acf":
+            if y is None:
+                raise ValueError("embargo_bars='acf' needs y in split()")
+            horizon = int(max(1, np.median(np.asarray(ends) - np.asarray(starts))))
+            return acf_embargo_bars(np.asarray(y), horizon)
+        return int(self.embargo_bars)
 
     def split(
         self, X, y=None, groups=None
@@ -76,7 +106,8 @@ class PurgedKFold(BaseCrossValidator):
             raise ValueError("Not enough samples for the requested n_splits")
 
         starts, ends = self._resolve_times(n_samples)
-        embargo_td = self._embargo_td(starts, ends, n_samples)
+        embargo_td = self._embargo_td(starts, ends, n_samples, y)
+        self.last_embargo_ = embargo_td
 
         fold_sizes = np.full(self.n_splits, n_samples // self.n_splits, dtype=int)
         fold_sizes[: n_samples % self.n_splits] += 1
@@ -94,5 +125,9 @@ class PurgedKFold(BaseCrossValidator):
                 ends,
                 embargo_td=embargo_td,
             )
+            if self.embargo_side == "both" and embargo_td:
+                train_indices = pre_embargo_train_indices(
+                    train_indices, test_indices, starts, ends, embargo_td
+                )
             yield train_indices, test_indices
             prev = end
