@@ -116,3 +116,43 @@ def run_job(job: tuple[float, int, int]) -> tuple[float, int, SeedResult]:
     """``(shock_phi, horizon, seed) -> (shock_phi, horizon, SeedResult)``; picklable for process pools."""
     phi, h, seed = job
     return phi, h, one_seed(phi, h, seed)
+
+
+# --- Post-hoc positive control (added after the grid; selects nothing) -------------
+# The grid found no leak in any arm, purge-only included. That is only informative if
+# the same measurement *can* see a leak. The control scores the same seeds with two
+# splitters that are known to leak on this null: contiguous K-fold with no purge (the
+# label windows at each fold boundary overlap) and shuffled K-fold (the slice 2 leak).
+
+CONTROL_ARMS = ("contiguous_no_purge", "shuffled_kfold")
+
+
+def control_seed(shock_phi: float, horizon: int, seed: int, n_samples: int = N_SAMPLES) -> dict[str, float]:
+    """CV accuracy of the two leaking splitters on one null draw (same data as ``one_seed``)."""
+    from sklearn.model_selection import KFold
+
+    ds = make_autocorrelated_null_dataset(n_samples, horizon, FEATURE_PHI, 3, seed, shock_phi=shock_phi)
+    model = make_sign_classifier("knn")
+    out = {}
+    for name, cv in (("contiguous_no_purge", KFold(N_SPLITS, shuffle=False)),
+                     ("shuffled_kfold", KFold(N_SPLITS, shuffle=True, random_state=seed))):
+        scores = []
+        for tr, te in cv.split(ds.X):
+            m = clone(model).fit(ds.X[tr], ds.y[tr])
+            scores.append(float((m.predict(ds.X[te]) == ds.y[te]).mean()))
+        out[name] = float(np.mean(scores))
+    return out
+
+
+def run_control_job(job: tuple[float, int, int]) -> tuple[float, int, dict[str, float]]:
+    phi, h, seed = job
+    return phi, h, control_seed(phi, h, seed)
+
+
+def summarize_control(rows: list[dict[str, float]]) -> dict[str, dict]:
+    out = {}
+    for name in CONTROL_ARMS:
+        opt = np.array([r[name] - 0.5 for r in rows])
+        se = float(opt.std(ddof=1) / np.sqrt(len(opt))) if len(opt) > 1 else float("nan")
+        out[name] = {"optimism": float(opt.mean()), "se": se, "leak": bool(opt.mean() > SE_MULT * se)}
+    return out
