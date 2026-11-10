@@ -1,0 +1,134 @@
+{
+  "n_seeds": 100,
+  "seed_start": 7000,
+  "cells": [
+    {
+      "shock_phi": 0.0,
+      "horizon": 5,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": 0.002493333333333328,
+          "se": 0.00240865666628246,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.12070666666666668,
+          "se": 0.0018489253104415737,
+          "leak": true
+        }
+      }
+    },
+    {
+      "shock_phi": 0.0,
+      "horizon": 20,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": 0.0066066666666666695,
+          "se": 0.003725076186146076,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.20730666666666667,
+          "se": 0.002403138987271369,
+          "leak": true
+        }
+      }
+    },
+    {
+      "shock_phi": 0.5,
+      "horizon": 5,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": 0.00146666666666667,
+          "se": 0.0026427037815874503,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.14875333333333335,
+          "se": 0.002060404436560884,
+          "leak": true
+        }
+      }
+    },
+    {
+      "shock_phi": 0.5,
+      "horizon": 20,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": 0.0064733333333333335,
+          "se": 0.003999610474860932,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.22324000000000002,
+          "se": 0.0025550551991507095,
+          "leak": true
+        }
+      }
+    },
+    {
+      "shock_phi": 0.8,
+      "horizon": 5,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": 0.0015000000000000074,
+          "se": 0.0032635713363682642,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.18577333333333335,
+          "se": 0.0023170130545487845,
+          "leak": true
+        }
+      }
+    },
+    {
+      "shock_phi": 0.8,
+      "horizon": 20,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": 0.005126666666666668,
+          "se": 0.00450981914125929,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.23928000000000005,
+          "se": 0.002768277572479691,
+          "leak": true
+        }
+      }
+    },
+    {
+      "shock_phi": 0.9,
+      "horizon": 5,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": -0.00058,
+          "se": 0.004023016328775427,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.21545333333333333,
+          "se": 0.0025577483784916697,
+          "leak": true
+        }
+      }
+    },
+    {
+      "shock_phi": 0.9,
+      "horizon": 20,
+      "arms": {
+        "contiguous_no_purge": {
+          "optimism": 0.00585333333333333,
+          "se": 0.004753993701796711,
+          "leak": false
+        },
+        "shuffled_kfold": {
+          "optimism": 0.25286666666666663,
+          "se": 0.002860536864996586,
+          "leak": true
+        }
+      }
+    }
+  ]
+}
