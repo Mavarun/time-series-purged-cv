@@ -299,6 +299,78 @@ Reading:
 - Power is the full-sample hurdle's; walk-forward selection (slice 3) at these lengths is not evaluated.
 - Real daily return panels were not used (offline, seeded).
 
+## Slice 7 (2026-11-10): a data-driven, two-sided embargo, and whether it buys anything
+
+The limits list said the embargo is "a crude fraction of the sample span, not an asset-specific correlation
+time". This slice adds the correlation-time version and tests it where it should matter most: bar shocks that
+are themselves persistent, so labels stay correlated *past* the label horizon and purging the overlapping
+windows no longer removes every shared-information channel.
+
+### What was added
+
+- `make_autocorrelated_null_dataset(..., shock_phi=)`: unit-variance AR(1) bar shocks (stationary start);
+  `shock_phi = 0` reproduces the old draws exactly. Features stay independent of labels, so true accuracy is 0.5.
+- `embargo.acf_embargo_bars(y, horizon)`: the embargo is read off the label autocorrelation: the first lag
+  past the horizon where the ACF drops inside the `2/sqrt(n)` band, minus the horizon (labels only).
+- `embargo.pre_embargo_train_indices` and `PurgedKFold(embargo_bars=int | "acf", embargo_side="after" | "both")`:
+  a two-sided embargo, because persistent shocks leak symmetrically, while the AFML embargo only covers the rows
+  after the test fold. Defaults are unchanged (`embargo_pct = 0.01`, after).
+- Frozen protocol `purged_cv.embargo_calibration` (written before the grid): shock_phi 0 / 0.5 / 0.8 / 0.9 x
+  horizon 5 / 20, n = 1500, k-NN, 5 folds, 100 fresh seeds (7000-7099). Five arms: purge only, 1% after
+  (default), 5% after, ACF after, ACF both sides. A *leak* is CV accuracy more than 2 s.e. above 0.5. The ACF
+  two-sided embargo is recommended only if it is leak-free everywhere, the default leaks in at least 2 of the
+  6 persistent cells, and it keeps at least 95% of the default's train rows when shocks are iid.
+
+### Results (`python scripts/run_embargo_calibration.py`, ~30 s on 8 cores; `artifacts/embargo_calibration.md`)
+
+CV accuracy - 0.5, 100 seeds per cell (s.e. 0.002-0.005). The last two columns are a post-hoc positive control
+on the same seeds (`scripts/run_embargo_positive_control.py`; it selects nothing).
+
+| shock phi | horizon | purge only | 1% after (default) | ACF both sides | median ACF embargo (bars) | ACF-both train rows vs default | contiguous, no purge | shuffled K-fold |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.0 | 5 | +0.0018 | +0.0022 | +0.0018 | 0 | 1.010 | +0.0025 | **+0.1207** |
+| 0.0 | 20 | +0.0047 | +0.0039 | +0.0046 | 0 | 1.006 | +0.0066 | **+0.2073** |
+| 0.5 | 5 | +0.0002 | +0.0007 | +0.0002 | 1 | 1.008 | +0.0015 | **+0.1488** |
+| 0.5 | 20 | +0.0039 | +0.0036 | +0.0038 | 0 | 1.005 | +0.0065 | **+0.2232** |
+| 0.8 | 5 | +0.0001 | +0.0001 | +0.0004 | 7 | 0.998 | +0.0015 | **+0.1858** |
+| 0.8 | 20 | +0.0019 | +0.0021 | +0.0014 | 0 | 0.999 | +0.0051 | **+0.2393** |
+| 0.9 | 5 | -0.0019 | -0.0022 | -0.0027 | 17 | 0.981 | -0.0006 | **+0.2155** |
+| 0.9 | 20 | +0.0006 | +0.0016 | +0.0012 | 7 | 0.988 | +0.0059 | **+0.2529** |
+
+Reading:
+
+- **No arm leaks in any cell, not even purge only**, so the default never fails and the pre-stated rule does
+  **not** recommend the ACF two-sided embargo. It stays available as an option; the default is unchanged.
+- The positive control shows the measurement works: shuffled K-fold is inflated by 12-25 points in every cell,
+  and more as shocks get more persistent. But contiguous folds **with no purge at all** stay within 2 s.e. of
+  0.5 too. At 5 folds of 300 rows only the few dozen rows at each fold boundary can leak, which is below what
+  100 seeds can resolve here (s.e. 0.002-0.005). The first-order protection is keeping folds contiguous; purge
+  and embargo are second-order at this scale.
+- The ACF length behaves as intended at horizon 5 (median 0 / 1 / 7 / 17 bars as shock_phi goes 0 -> 0.9) and
+  costs at most 2% of the default's train rows. At horizon 20 it is unstable (median 0-7 bars; exploratory seeds
+  0-5 gave 1 to 85 at shock_phi 0.9): overlapping 20-bar labels have few effective observations, so the white-noise band is too narrow.
+
+### What the tests check
+
+- `shock_phi`: old draws unchanged at 0, features independent of it, label ACF past the horizon only with
+  persistent shocks, unit shock variance, validation.
+- ACF embargo and two-sided embargo: zero for iid shocks, longer with persistence, the cap when the ACF never
+  falls inside the band, the exact rows the pre-test embargo drops, defaults reproduce the old splits, `"acf"`
+  needs `y`, bad options rejected.
+- Artifacts: full grid and seeds, no leak in any arm, the call reproduces from the record, the ACF length is
+  monotone in persistence at horizon 5; the control's shuffled leak is > 10 points everywhere and monotone in
+  persistence, contiguous folds without purge show no measurable leak.
+
+### Weaknesses of this slice
+
+- One learner (k-NN on 3 slow AR features), one sample size, 5 folds. The boundary leak scales with the number
+  of fold boundaries times the correlation length over n; many folds (CPCV with small groups) or short samples
+  would make it visible and are not run here.
+- The ACF band ignores that the labels themselves are autocorrelated (Bartlett's formula would widen it), which
+  is why the estimate is noisy at horizon 20.
+- A null tests only optimism. What an embargo costs on a real edge (fewer train rows near the test fold) is not
+  measured; at <= 2% of rows it is unlikely to matter here.
+
 ## How to run
 
 ```bash
@@ -313,6 +385,8 @@ python scripts/run_overfitting_diagnostics.py --json
 python scripts/run_dsr_calibration.py                  # DSR effective-N / max-stat calibration (~1.5 min)
 python scripts/run_selector_ablation.py                # walk-forward selector ablation (incl. EB)
 python scripts/run_rc_calibration.py                   # reality check vs max-stat, normal vs GARCH-t (~3 min, 8 cores)
+python scripts/run_embargo_calibration.py              # slice 7 embargo grid (~30 s, 8 cores)
+python scripts/run_embargo_positive_control.py         # slice 7 post-hoc positive control
 # optional market data (network; cite Yahoo Finance / yfinance):
 python scripts/run_purged_cv_slice.py --yfinance --ticker SPY
 ```
@@ -348,7 +422,7 @@ tests/
 ## Limits / what is still weak
 
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
-- Embargo length is a crude fraction of the sample span, not an asset-specific correlation time.
+- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7), but on the slice 7 null no embargo, and not even purge, measurably changed a contiguous 5-fold CV, so their value at many folds or short samples is untested.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
 - Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
