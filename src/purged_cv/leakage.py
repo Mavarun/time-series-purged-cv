@@ -17,6 +17,13 @@ Design (ground truth known by construction)
 * A *fresh holdout* (independent draw from the same process, model fitted on
   the full original sample) measures the realised out-of-sample accuracy.
 
+Persistent shocks (``shock_phi > 0``, slice 7): the bar shocks follow a
+unit-variance AR(1), ``e_t = shock_phi * e_{t-1} + sqrt(1 - shock_phi^2) z_t``.
+Labels then stay correlated *beyond* the label horizon, so purging the
+overlapping windows no longer removes every shared-information channel; that
+residual is what an embargo is for. ``shock_phi = 0`` reproduces the original
+draws exactly.
+
 Controls: with ``horizon=1`` (no label overlap) or ``feature_phi=0`` (no
 feature persistence) naive K-fold should not be inflated - the leak needs
 both overlapping labels and serially correlated features.
@@ -43,14 +50,23 @@ def make_autocorrelated_null_dataset(
     feature_phi: float = 0.98,
     n_features: int = 3,
     seed: int = 0,
+    shock_phi: float = 0.0,
 ) -> LabeledDataset:
     """Overlapping-horizon sign labels with features independent of labels."""
     if horizon < 1:
         raise ValueError("horizon must be >= 1")
     if not 0.0 <= feature_phi < 1.0:
         raise ValueError("feature_phi must be in [0, 1)")
+    if not 0.0 <= shock_phi < 1.0:
+        raise ValueError("shock_phi must be in [0, 1)")
     rng = np.random.default_rng(seed)
     shocks = rng.normal(size=n_samples + horizon + 1)
+    if shock_phi > 0:
+        innov = shocks * np.sqrt(1.0 - shock_phi**2)
+        shocks = np.empty_like(innov)
+        shocks[0] = innov[0] / np.sqrt(1.0 - shock_phi**2)  # stationary start
+        for t in range(1, len(innov)):
+            shocks[t] = shock_phi * shocks[t - 1] + innov[t]
     csum = np.concatenate([[0.0], np.cumsum(shocks)])
     idx = np.arange(n_samples)
     fwd = csum[idx + 1 + horizon] - csum[idx + 1]  # e_{i+1} + ... + e_{i+h}
@@ -76,6 +92,7 @@ def make_autocorrelated_null_dataset(
             "source": "autocorrelated_null",
             "horizon": horizon,
             "feature_phi": feature_phi,
+            "shock_phi": shock_phi,
             "seed": seed,
             "true_accuracy": 0.5,
             "citation": "Synthetic null: features independent of labels by construction.",
