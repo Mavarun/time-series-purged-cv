@@ -488,6 +488,46 @@ Reading:
 - "No leak" means "not more than 2 s.e. above zero" in each cell; with 4 cells per learner, a small leak in one
   cell could be missed.
 
+## Slice 10 (2026-11-20): logistic regression leaks too, and purging still removes it
+
+Slice 9 could not test logistic regression: its no-purge control never leaked at n 1500 with 60 seeds. This slice
+gives that control its best chance: n 500, 20 folds (25-row test folds), and 240 fresh seeds (9100-9339), four times
+slice 9's. The k-NN cells repeat slice 8's n 500 / 20-fold cells as a reproduction check. Protocol frozen in
+`purged_cv/logistic_power.py` before any score: logistic is **testable** iff its control leaks in >= 1 of 2 cells,
+and the default **holds** iff it is then leak-free in both. No logistic call is made unless the k-NN control leaks
+in both cells and the k-NN default in neither.
+
+Run: `python scripts/run_logistic_power.py` (~5 min, 8 cores); `artifacts/logistic_power.{json,md}`.
+Cells are CV accuracy - 0.5 (s.e.); `*` = more than 2 s.e. above zero.
+
+| learner | shock phi | purge only | 1% after (default) | no purge (control) |
+| :--- | ---: | :--- | :--- | :--- |
+| logistic | 0.0 | -0.0028 (0.0065) | -0.0022 (0.0064) | +0.0279 (0.0061)* |
+| logistic | 0.9 | +0.0008 (0.0083) | -0.0000 (0.0083) | +0.0541 (0.0073)* |
+| knn | 0.0 | +0.0074 (0.0045) | +0.0073 (0.0045) | +0.0675 (0.0040)* |
+| knn | 0.9 | +0.0078 (0.0061) | +0.0063 (0.0061) | +0.1011 (0.0051)* |
+
+**Calls.** The k-NN reproduction passes: its control leaks in both cells (+0.068 / +0.101 against slice 8's
++0.064 / +0.100) and its default in neither. Logistic's control leaks in **both** cells, so logistic is testable,
+and purge only and the default are leak-free in both. **The default holds for a linear learner**, so slice 9's
+"logistic untestable" caveat is replaced by a pass at n 500. The package default does not change.
+
+Reading:
+
+- A linear model does leak without purging: +0.054 at shock phi 0.9, about half the k-NN's +0.101. Slice 9 missed
+  it because at n 1500 the leak is smaller and 60 seeds gave an s.e. of about 0.011.
+- The purged k-NN cells sit at +0.007 / +0.008, 1.6 and 1.3 s.e. above zero. Under the rule that is not a leak,
+  but it is the largest purged k-NN optimism in slices 8-10, so a small residual at 25-row test folds cannot be
+  ruled out.
+
+### Weaknesses of this slice
+
+- One cell size for logistic (n 500, 20 folds). At n 1500 the logistic leak is still unmeasured, only bounded
+  (slice 9: +0.019, s.e. 0.011).
+- Still one feature process (3 AR(1) features, phi 0.98, horizon 20).
+- 2-s.e. tests in 4 cells with no multiplicity correction. The purged k-NN cells are close enough to the line that a
+  re-run on other seeds could flip one of them.
+
 ## How to run
 
 ```bash
@@ -507,6 +547,7 @@ python scripts/run_embargo_positive_control.py         # slice 7 post-hoc positi
 python scripts/run_fold_count_calibration.py           # slice 8 many folds / short samples (~1 min, 8 cores)
 python scripts/run_edge_cost.py                        # slice 8b embargo cost on a real edge (~20 s, 8 cores)
 python scripts/run_learner_calibration.py              # slice 9 logistic / k-NN / forest leak check (~6 min, 8 cores)
+python scripts/run_logistic_power.py                   # slice 10 logistic leak at n 500 / 20 folds / 240 seeds (~5 min, 8 cores)
 # optional market data (network; cite Yahoo Finance / yfinance):
 python scripts/run_purged_cv_slice.py --yfinance --ticker SPY
 ```
@@ -530,6 +571,7 @@ src/purged_cv/
   data.py       # synthetic AR + optional yfinance helpers
   model.py      # logistic / ridge / k-NN / random-forest return-sign classifiers
   learner_calibration.py # slice 9 frozen protocol: purge sufficiency per learner
+  logistic_power.py # slice 10 frozen protocol: logistic leak at n 500 / 20 folds
   metrics.py    # naive vs purged comparison
 scripts/run_purged_cv_slice.py
 scripts/run_overfitting_diagnostics.py
@@ -543,7 +585,7 @@ tests/
 ## Limits / what is still weak
 
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
-- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Slice 9 found the same for a random forest; logistic regression was not testable (its no-purge control never leaked), and only one feature process was tested.
+- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Slice 9 found the same for a random forest; logistic regression was not testable there (its no-purge control never leaked at n 1500), but at n 500 / 20 folds / 240 seeds its control leaks (+0.028 / +0.054) and purging removes it (slice 10). Only one feature process was tested.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
 - Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
