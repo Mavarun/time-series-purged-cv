@@ -439,6 +439,55 @@ CV accuracy - 0.5, 100 seeds per cell (s.e. 0.004-0.009); `*` = more than 2 s.e.
 - The control leaks in only 7 of 12 cells: it is not detectable at 5 folds or at n 1500 / 10 folds / shock phi 0.9, so
   "no leak" in those cells is weaker evidence than at 20 folds.
 
+## Slice 9 (2026-11-19): does purging stay sufficient beyond k-NN?
+
+Slices 7-8 tested only a k-NN. This slice re-runs the slice-8 null (n 1500, horizon 20, feature phi 0.98) with
+three learners: logistic regression, the k-NN again, and a new seeded random forest (`make_sign_classifier("forest")`,
+50 trees, min leaf 5). Protocol frozen in `purged_cv/learner_calibration.py` before any score: folds {5, 20} x shock
+phi {0, 0.9}, 60 fresh seeds (9000-9059), arms purge only and the 1% default, the no-purge control per learner. A
+learner is **testable** only if its control leaks in >= 2 of its 4 cells; the k-NN-only caveat is dropped only if
+the default is leak-free for every testable learner and >= 2 learners are testable.
+
+Run: `python scripts/run_learner_calibration.py` (~6 min, 8 cores); `artifacts/learner_calibration.{json,md}`.
+Cells are CV accuracy - 0.5 (s.e.); `*` = more than 2 s.e. above zero.
+
+| learner | folds | shock phi | purge only | 1% after (default) | no purge (control) |
+| :--- | ---: | ---: | :--- | :--- | :--- |
+| logistic | 5 | 0.0 | +0.0010 (0.0070) | -0.0012 (0.0071) | +0.0009 (0.0071) |
+| logistic | 5 | 0.9 | +0.0001 (0.0097) | -0.0000 (0.0096) | +0.0034 (0.0099) |
+| logistic | 20 | 0.0 | +0.0012 (0.0081) | +0.0003 (0.0080) | +0.0088 (0.0080) |
+| logistic | 20 | 0.9 | +0.0074 (0.0106) | +0.0059 (0.0107) | +0.0189 (0.0107) |
+| knn | 5 | 0.0 | -0.0041 (0.0046) | -0.0054 (0.0045) | -0.0008 (0.0045) |
+| knn | 5 | 0.9 | -0.0016 (0.0057) | -0.0014 (0.0057) | +0.0055 (0.0053) |
+| knn | 20 | 0.0 | -0.0046 (0.0050) | -0.0053 (0.0048) | +0.0118 (0.0051)* |
+| knn | 20 | 0.9 | -0.0009 (0.0056) | -0.0019 (0.0056) | +0.0247 (0.0055)* |
+| forest | 5 | 0.0 | -0.0065 (0.0053) | -0.0083 (0.0051) | -0.0035 (0.0051) |
+| forest | 5 | 0.9 | -0.0012 (0.0063) | -0.0006 (0.0062) | +0.0069 (0.0062) |
+| forest | 20 | 0.0 | -0.0058 (0.0053) | -0.0045 (0.0050) | +0.0108 (0.0051)* |
+| forest | 20 | 0.9 | +0.0001 (0.0063) | -0.0003 (0.0064) | +0.0258 (0.0062)* |
+
+**Calls.** The control leaks for the k-NN and the forest at 20 folds only (2 of 4 cells each), so both are
+testable; purge only and the default are leak-free in all of their cells. Logistic's control never leaks
+(0 of 4), so logistic is **not testable** here. Two testable learners pass, so the k-NN-only caveat is dropped for
+flexible learners. The package default does not change.
+
+Reading:
+
+- The forest leaks about as much as the k-NN when nothing is purged (+0.026 vs +0.025 at 20 folds, shock phi 0.9):
+  its leaves isolate runs of neighbouring bars much as nearest neighbours do.
+- The k-NN rows reproduce slice 8 on fresh seeds: no leak at 5 folds, a leak at 20, none once purged.
+- At 5 folds the purged k-NN and forest arms sit slightly *below* 0.5 (down to -0.008, about 1.6 s.e.), the
+  known small pessimism from training on less data next to the test fold. It is not significant here.
+
+### Weaknesses of this slice
+
+- Logistic is untestable, not cleared: its control's s.e. is about twice the k-NN's (0.0107 vs 0.0055 at 20 folds,
+  shock phi 0.9) and its +0.019 point estimate there is under 2 s.e. A linear learner may leak a little in ways
+  60 seeds cannot see.
+- One forest size and one feature process; n 1500 only (slice 8 found the leak larger at n 500).
+- "No leak" means "not more than 2 s.e. above zero" in each cell; with 4 cells per learner, a small leak in one
+  cell could be missed.
+
 ## How to run
 
 ```bash
@@ -457,6 +506,7 @@ python scripts/run_embargo_calibration.py              # slice 7 embargo grid (~
 python scripts/run_embargo_positive_control.py         # slice 7 post-hoc positive control
 python scripts/run_fold_count_calibration.py           # slice 8 many folds / short samples (~1 min, 8 cores)
 python scripts/run_edge_cost.py                        # slice 8b embargo cost on a real edge (~20 s, 8 cores)
+python scripts/run_learner_calibration.py              # slice 9 logistic / k-NN / forest leak check (~6 min, 8 cores)
 # optional market data (network; cite Yahoo Finance / yfinance):
 python scripts/run_purged_cv_slice.py --yfinance --ticker SPY
 ```
@@ -478,7 +528,8 @@ src/purged_cv/
   embargo.py    # purge / embargo helpers
   weights.py    # optional average-uniqueness sample weights
   data.py       # synthetic AR + optional yfinance helpers
-  model.py      # logistic / ridge return-sign classifiers
+  model.py      # logistic / ridge / k-NN / random-forest return-sign classifiers
+  learner_calibration.py # slice 9 frozen protocol: purge sufficiency per learner
   metrics.py    # naive vs purged comparison
 scripts/run_purged_cv_slice.py
 scripts/run_overfitting_diagnostics.py
@@ -492,7 +543,7 @@ tests/
 ## Limits / what is still weak
 
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
-- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Only k-NN on one feature process was tested.
+- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Slice 9 found the same for a random forest; logistic regression was not testable (its no-purge control never leaked), and only one feature process was tested.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
 - Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
