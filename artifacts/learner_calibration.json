@@ -1,0 +1,299 @@
+{
+  "n_seeds": 60,
+  "seed_start": 9000,
+  "n": 1500,
+  "horizon": 20,
+  "cells": [
+    {
+      "learner": "logistic",
+      "n_splits": 5,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.0010444444444444487,
+          "se": 0.007013311111553279,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.0012222222222222255,
+          "se": 0.007083984867195919,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.0008666666666666665,
+          "se": 0.00712681822264723,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "logistic",
+      "n_splits": 5,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.00010000000000000749,
+          "se": 0.009666696863385525,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -4.4444444444447875e-05,
+          "se": 0.009564527824670337,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.003377777777777789,
+          "se": 0.0099264320452615,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "logistic",
+      "n_splits": 20,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.0012111111111111027,
+          "se": 0.008061899443724154,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": 0.00027777777777777864,
+          "se": 0.008027280724092934,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.008788888888888902,
+          "se": 0.008002094698562527,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "logistic",
+      "n_splits": 20,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.007422222222222224,
+          "se": 0.010574453892297135,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": 0.005944444444444434,
+          "se": 0.010674553248145771,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.018900000000000007,
+          "se": 0.01073529973448356,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "knn",
+      "n_splits": 5,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.004144444444444447,
+          "se": 0.004612602939760932,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.0053666666666666646,
+          "se": 0.004463014641038813,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": -0.0008222222222222187,
+          "se": 0.004497118186303991,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "knn",
+      "n_splits": 5,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0016222222222222222,
+          "se": 0.005702200909140483,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.0014333333333333273,
+          "se": 0.0056797528084280395,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.005511111111111121,
+          "se": 0.005348938250339282,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "knn",
+      "n_splits": 20,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.004577777777777774,
+          "se": 0.0049964574183741705,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.005299999999999991,
+          "se": 0.004791743919789924,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.011777777777777786,
+          "se": 0.005105654993304067,
+          "leak": true
+        }
+      }
+    },
+    {
+      "learner": "knn",
+      "n_splits": 20,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0008777777777777737,
+          "se": 0.005622001700267182,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.001899999999999998,
+          "se": 0.005636795646471081,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.024655555555555566,
+          "se": 0.005484521200401765,
+          "leak": true
+        }
+      }
+    },
+    {
+      "learner": "forest",
+      "n_splits": 5,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.006477777777777777,
+          "se": 0.005276940363736102,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.008311111111111108,
+          "se": 0.005146088456993152,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": -0.003477777777777779,
+          "se": 0.005124466910964841,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "forest",
+      "n_splits": 5,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0012444444444444406,
+          "se": 0.006346620350419443,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.0006444444444444438,
+          "se": 0.006165431579204921,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.006866666666666663,
+          "se": 0.006162220110114459,
+          "leak": false
+        }
+      }
+    },
+    {
+      "learner": "forest",
+      "n_splits": 20,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.005799999999999992,
+          "se": 0.005345708336092021,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.004511111111111101,
+          "se": 0.00495932904222626,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.010766666666666673,
+          "se": 0.005093102434103273,
+          "leak": true
+        }
+      }
+    },
+    {
+      "learner": "forest",
+      "n_splits": 20,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": 7.777777777778402e-05,
+          "se": 0.0063319770907182054,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.0002666666666666669,
+          "se": 0.006427639625969305,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.02583333333333333,
+          "se": 0.006234799469055488,
+          "leak": true
+        }
+      }
+    }
+  ],
+  "call": {
+    "per_learner": {
+      "logistic": {
+        "control_leaks": 0,
+        "n_cells": 4,
+        "testable": false,
+        "default_leaks": 0,
+        "default_holds": false
+      },
+      "knn": {
+        "control_leaks": 2,
+        "n_cells": 4,
+        "testable": true,
+        "default_leaks": 0,
+        "default_holds": true
+      },
+      "forest": {
+        "control_leaks": 2,
+        "n_cells": 4,
+        "testable": true,
+        "default_leaks": 0,
+        "default_holds": true
+      }
+    },
+    "n_testable": 2,
+    "widen_claim": true
+  }
+}
