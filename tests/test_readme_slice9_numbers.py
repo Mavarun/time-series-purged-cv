@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
-SECTION = README[README.index("## Slice 9 (2026-11-19)"): README.index("## How to run")]
+SECTION = README[README.index("## Slice 9 (2026-11-19)"): README.index("## Slice 10 (2026-11-20)")]
 REC = json.loads((ROOT / "artifacts" / "learner_calibration.json").read_text(encoding="utf-8"))
 
 
