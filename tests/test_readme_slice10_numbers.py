@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
-SECTION = README[README.index("## Slice 10 (2026-11-20)"): README.index("## How to run")]
+SECTION = README[README.index("## Slice 10 (2026-11-20)"): README.index("## Slice 11 (2026-11-20)")]
 ART = json.loads((ROOT / "artifacts" / "logistic_power.json").read_text())
 NAMES = ("purge_only", "pct1_after", "contiguous_no_purge")
 
