@@ -1,9 +1,11 @@
-"""Return-sign models: logistic, ridge, and a k-NN for leakage diagnostics.
+"""Return-sign models: logistic, ridge, a k-NN and a random forest for leakage diagnostics.
 
 The k-NN is deliberately included as a *flexible, local* learner: with
 serially correlated features its nearest neighbours in feature space are
 mostly its neighbours in time, which is exactly the setting where shuffled
-K-fold leaks overlapping labels from train into test.
+K-fold leaks overlapping labels from train into test. The random forest is the other
+flexible learner people actually use; its leaves can isolate a short run of neighbouring
+bars the same way.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression, RidgeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
@@ -25,12 +28,14 @@ class FittedScores:
 
 
 def make_sign_classifier(
-    kind: str = "logistic", C: float = 1.0, alpha: float = 1.0, n_neighbors: int = 5
+    kind: str = "logistic", C: float = 1.0, alpha: float = 1.0, n_neighbors: int = 5,
+    n_estimators: int = 50, min_samples_leaf: int = 5, random_state: int = 0,
 ) -> Pipeline:
     """Return a scaled classifier for binary return-sign prediction.
 
-    ``kind`` is ``"logistic"``, ``"ridge"`` or ``"knn"``. k-NN does not accept
-    sample weights.
+    ``kind`` is ``"logistic"``, ``"ridge"``, ``"knn"`` or ``"forest"`` (a small,
+    seeded random forest; scaling is a no-op for it but keeps the pipeline shape).
+    k-NN does not accept sample weights.
     """
     kind = kind.lower()
     if kind == "logistic":
@@ -43,8 +48,11 @@ def make_sign_classifier(
         clf = RidgeClassifier(alpha=alpha)
     elif kind == "knn":
         clf = KNeighborsClassifier(n_neighbors=n_neighbors)
+    elif kind in {"forest", "rf"}:
+        clf = RandomForestClassifier(n_estimators=n_estimators, min_samples_leaf=min_samples_leaf,
+                                     random_state=random_state, n_jobs=1)
     else:
-        raise ValueError("kind must be 'logistic', 'ridge' or 'knn'")
+        raise ValueError("kind must be 'logistic', 'ridge', 'knn' or 'forest'")
     return Pipeline(
         [
             ("scaler", StandardScaler()),
