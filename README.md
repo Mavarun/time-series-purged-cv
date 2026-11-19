@@ -371,6 +371,74 @@ Reading:
 - A null tests only optimism. What an embargo costs on a real edge (fewer train rows near the test fold) is not
   measured; at <= 2% of rows it is unlikely to matter here.
 
+## Slice 8 (2026-11-19): many folds, short samples, and what the embargo costs on a real edge
+
+Slice 7 left two things open: whether purging alone still holds when there are many fold boundaries relative
+to n (the residual boundary leak should grow with the number of boundaries), and what an embargo costs when
+there is a real, persistent edge (it drops the train rows closest to each test fold). Both protocols were
+frozen in code before any score was computed; a 2-seed smoke run of each script was only used to check it runs.
+
+### What was added
+
+- `purged_cv.fold_count_calibration` (frozen): the slice 7 null at n 500 / 1500 x 5 / 10 / 20 folds x shock phi
+  0 / 0.9, horizon 20, k-NN, 100 fresh seeds (8000-8099). Arms: purge only, 1% after (default), ACF both sides,
+  plus contiguous K-fold with **no purge** as an in-grid positive control. The grid only counts if the control
+  leaks in at least half the cells.
+- `purged_cv.edge_cost` (frozen) and `make_signal_dataset`: the same persistent features and AR(1) shocks plus a
+  real edge, `beta * X[t-1, 0]` added to every bar shock (beta 0.15). Truth is the full-sample model scored on the
+  next 5000 bars. n 500 x 5 / 20 folds x shock phi 0 / 0.9, seeds 8100-8199. The embargo is called *cheap* only if
+  both embargo arms cost at most 0.005 CV accuracy against purge only in every cell.
+
+### Results: optimism on the null (`python scripts/run_fold_count_calibration.py`, ~1 min on 8 cores)
+
+CV accuracy - 0.5, 100 seeds per cell (s.e. 0.004-0.009); `*` = more than 2 s.e. above zero.
+
+| n | folds | shock phi | purge only | 1% after (default) | ACF both sides | no purge (control) |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 500 | 5 | 0.0 | -0.0034 | -0.0046 | -0.0036 | +0.0105 |
+| 500 | 5 | 0.9 | -0.0035 | -0.0054 | -0.0071 | +0.0187 |
+| 500 | 10 | 0.0 | -0.0024 | -0.0045 | -0.0037 | +0.0270* |
+| 500 | 10 | 0.9 | +0.0009 | -0.0005 | -0.0099 | +0.0474* |
+| 500 | 20 | 0.0 | -0.0033 | -0.0036 | -0.0050 | +0.0637* |
+| 500 | 20 | 0.9 | -0.0022 | -0.0030 | -0.0129 | +0.0997* |
+| 1500 | 5 | 0.0 | +0.0015 | +0.0012 | +0.0011 | +0.0057 |
+| 1500 | 5 | 0.9 | -0.0036 | -0.0033 | -0.0035 | +0.0020 |
+| 1500 | 10 | 0.0 | -0.0007 | +0.0002 | -0.0005 | +0.0081* |
+| 1500 | 10 | 0.9 | -0.0031 | -0.0035 | -0.0033 | +0.0069 |
+| 1500 | 20 | 0.0 | -0.0001 | -0.0002 | -0.0002 | +0.0140* |
+| 1500 | 20 | 0.9 | -0.0042 | -0.0043 | -0.0051 | +0.0186* |
+
+- The control works: it leaks in 7 of 12 cells, and its optimism grows with the fold count in every
+  (n, shock phi) pair, up to +0.100 at n 500, 20 folds.
+- **Purge alone removes all of it**, in every cell, including 20 folds at n 500 (25-row test folds).
+  The default leaks in 0 of 8 many-fold cells, so it is documented as sufficient here and the ACF two-sided
+  embargo is **not** recommended (pre-stated call).
+
+### Results: cost on a real edge (`python scripts/run_edge_cost.py`, ~20 s on 8 cores)
+
+| folds | shock phi | truth | purge-only bias vs truth | 1% after cost (s.e.) | ACF both sides cost (s.e.) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 5 | 0.0 | 0.562 | -0.0001 | +0.0020 (0.0016) | +0.0064 (0.0034) |
+| 5 | 0.9 | 0.506 | -0.0080 | +0.0020 (0.0014) | +0.0036 (0.0024) |
+| 20 | 0.0 | 0.562 | +0.0083 | +0.0008 (0.0014) | +0.0083 (0.0027) |
+| 20 | 0.9 | 0.506 | +0.0043 | +0.0024 (0.0012) | +0.0111 (0.0030) |
+
+- The 1% default costs at most 0.0024 CV accuracy against purge only; it is cheap.
+- The two-sided ACF embargo costs up to 0.0111 (20 folds, shock phi 0.9), about
+  3.7 s.e. It makes CV pessimistic, which is the other half of why it is not recommended.
+  The pre-stated "embargo is cheap" call is therefore **no** (it needed both arms under 0.005).
+- No arm's bias against truth is more than about 1 s.e. from zero, so purged CV is roughly unbiased here.
+
+### Weaknesses of this slice
+
+- One learner (k-NN) and one feature process again. A learner that uses the nearest-in-time rows less directly
+  could leak less, and one that memorises more could leak more.
+- With shock phi 0.9 the persistent noise swamps the edge (truth 0.562 -> 0.506), so those two
+  edge-cost cells say little about a usable edge.
+- Truth is one 5000-bar continuation per seed, which adds its own noise (bias s.e. about 0.01).
+- The control leaks in only 7 of 12 cells: it is not detectable at 5 folds or at n 1500 / 10 folds / shock phi 0.9, so
+  "no leak" in those cells is weaker evidence than at 20 folds.
+
 ## How to run
 
 ```bash
@@ -387,6 +455,8 @@ python scripts/run_selector_ablation.py                # walk-forward selector a
 python scripts/run_rc_calibration.py                   # reality check vs max-stat, normal vs GARCH-t (~3 min, 8 cores)
 python scripts/run_embargo_calibration.py              # slice 7 embargo grid (~30 s, 8 cores)
 python scripts/run_embargo_positive_control.py         # slice 7 post-hoc positive control
+python scripts/run_fold_count_calibration.py           # slice 8 many folds / short samples (~1 min, 8 cores)
+python scripts/run_edge_cost.py                        # slice 8b embargo cost on a real edge (~20 s, 8 cores)
 # optional market data (network; cite Yahoo Finance / yfinance):
 python scripts/run_purged_cv_slice.py --yfinance --ticker SPY
 ```
@@ -422,7 +492,7 @@ tests/
 ## Limits / what is still weak
 
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
-- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7), but on the slice 7 null no embargo, and not even purge, measurably changed a contiguous 5-fold CV, so their value at many folds or short samples is untested.
+- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Only k-NN on one feature process was tested.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
 - Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
