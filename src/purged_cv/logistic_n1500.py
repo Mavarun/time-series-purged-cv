@@ -75,3 +75,19 @@ def call(cells: dict[float, dict[str, dict]]) -> dict:
     return {"measured": bool(measured), "default_holds": bool(holds), "shrinks_with_n": bool(shrinks),
             "control_leaks": int(leaks), "default_leaks": int(sum(c[DEFAULT_ARM]["leak"] for c in cells.values())),
             "control_upper_bound": float(bound)}
+
+
+def leak_scaling(n1500: dict[float, dict], n500: dict[float, dict]) -> dict[float, dict]:
+    """POST-HOC (written after the run; decides nothing): the control leak's power law in n.
+
+    ``exponent`` = ln(leak_500 / leak_1500) / ln 3, with a delta-method s.e. from the two
+    cells' s.e.s (independent seeds). An exponent of 1 is "leak ~ 1/n": the purge-sized
+    boundary band is a fixed number of rows per fold, so its share of the data falls as 1/n.
+    """
+    out = {}
+    for phi in SHOCK_PHIS:
+        a, b = n500[phi][CONTROL], n1500[phi][CONTROL]
+        e = float(np.log(a["optimism"] / b["optimism"]) / np.log(3.0))
+        se = float(np.sqrt((a["se"] / a["optimism"]) ** 2 + (b["se"] / b["optimism"]) ** 2) / np.log(3.0))
+        out[phi] = {"exponent": e, "se": se, "ratio": float(a["optimism"] / b["optimism"])}
+    return out
