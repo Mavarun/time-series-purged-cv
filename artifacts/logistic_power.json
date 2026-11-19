@@ -1,0 +1,101 @@
+{
+  "n_seeds": 240,
+  "seed_start": 9100,
+  "n": 500,
+  "n_splits": 20,
+  "horizon": 20,
+  "cells": [
+    {
+      "learner": "logistic",
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0027999999999999857,
+          "se": 0.006475819199886871,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -0.0022333333333333133,
+          "se": 0.006385155014251452,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.027941666666666684,
+          "se": 0.006128794306684591,
+          "leak": true
+        }
+      }
+    },
+    {
+      "learner": "logistic",
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.0007500000000000131,
+          "se": 0.008315141580148106,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": -1.6666666666654192e-05,
+          "se": 0.00832465370857767,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.054075000000000005,
+          "se": 0.007281798742199402,
+          "leak": true
+        }
+      }
+    },
+    {
+      "learner": "knn",
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.007391666666666681,
+          "se": 0.004543151203895792,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": 0.0072750000000000115,
+          "se": 0.004533337403343402,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.06754166666666667,
+          "se": 0.004037311993570266,
+          "leak": true
+        }
+      }
+    },
+    {
+      "learner": "knn",
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.007750000000000018,
+          "se": 0.006063921762429386,
+          "leak": false
+        },
+        "pct1_after": {
+          "optimism": 0.006316666666666682,
+          "se": 0.0060601930877113176,
+          "leak": false
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.10113333333333334,
+          "se": 0.005101910745882304,
+          "leak": true
+        }
+      }
+    }
+  ],
+  "call": {
+    "reproduced": true,
+    "logistic_testable": true,
+    "logistic_default_holds": true,
+    "logistic_control_leaks": 2,
+    "logistic_default_leaks": 0,
+    "logistic_control_upper_bound": 0.06863859748439881
+  }
+}
