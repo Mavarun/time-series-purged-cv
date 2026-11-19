@@ -7,7 +7,7 @@ from purged_cv.logistic_n1500 import leak_scaling
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text()
-SECTION = README[README.index("## Slice 11 (2026-11-20)"): README.index("## How to run")]
+SECTION = README[README.index("## Slice 11 (2026-11-20)"): README.index("## Slice 12 (2026-11-20)")]
 A = json.loads((ROOT / "artifacts" / "logistic_n1500.json").read_text())
 B = json.loads((ROOT / "artifacts" / "logistic_power.json").read_text())
 
