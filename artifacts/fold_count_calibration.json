@@ -1,0 +1,390 @@
+{
+  "n_seeds": 100,
+  "seed_start": 8000,
+  "horizon": 20,
+  "cells": [
+    {
+      "n": 500,
+      "n_splits": 5,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.003399999999999989,
+          "se": 0.006661118903795747,
+          "leak": false,
+          "keep_vs_default": 1.0109890109890107
+        },
+        "pct1_after": {
+          "optimism": -0.004579999999999994,
+          "se": 0.006656737757772766,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.0035799999999999894,
+          "se": 0.006657284003482975,
+          "leak": false,
+          "keep_vs_default": 0.9962197802197801
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.010499999999999999,
+          "se": 0.006779671038770199,
+          "leak": false,
+          "keep_vs_default": 1.0989010989010985
+        }
+      }
+    },
+    {
+      "n": 500,
+      "n_splits": 5,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0035199999999999897,
+          "se": 0.008794586029731214,
+          "leak": false,
+          "keep_vs_default": 1.0109890109890107
+        },
+        "pct1_after": {
+          "optimism": -0.005420000000000004,
+          "se": 0.00880249253038449,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.007079999999999998,
+          "se": 0.008750384464858003,
+          "leak": false,
+          "keep_vs_default": 0.9664615384615384
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.018699999999999998,
+          "se": 0.00954569552365374,
+          "leak": false,
+          "keep_vs_default": 1.0989010989010985
+        }
+      }
+    },
+    {
+      "n": 500,
+      "n_splits": 10,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.002419999999999985,
+          "se": 0.00651564054542389,
+          "leak": false,
+          "keep_vs_default": 1.0109890109890107
+        },
+        "pct1_after": {
+          "optimism": -0.0044599999999999805,
+          "se": 0.006329654753059544,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.003659999999999986,
+          "se": 0.0065019067910261465,
+          "leak": false,
+          "keep_vs_default": 0.9964590964590964
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.02700000000000001,
+          "se": 0.006430891356286749,
+          "leak": true,
+          "keep_vs_default": 1.0989010989010985
+        }
+      }
+    },
+    {
+      "n": 500,
+      "n_splits": 10,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.0009000000000000064,
+          "se": 0.008346988811674675,
+          "leak": false,
+          "keep_vs_default": 1.0109890109890107
+        },
+        "pct1_after": {
+          "optimism": -0.0004999999999999894,
+          "se": 0.008396506007340978,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.009859999999999994,
+          "se": 0.008687864751444622,
+          "leak": false,
+          "keep_vs_default": 0.9672869352869352
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.04738000000000002,
+          "se": 0.008648358050502822,
+          "leak": true,
+          "keep_vs_default": 1.0989010989010985
+        }
+      }
+    },
+    {
+      "n": 500,
+      "n_splits": 20,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0032599999999999864,
+          "se": 0.006421092452443609,
+          "leak": false,
+          "keep_vs_default": 1.0109890109890107
+        },
+        "pct1_after": {
+          "optimism": -0.0036399999999999753,
+          "se": 0.0062250312562600165,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.004959999999999985,
+          "se": 0.006530084535471501,
+          "leak": false,
+          "keep_vs_default": 0.9968791208791208
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.0637,
+          "se": 0.006232166476426876,
+          "leak": true,
+          "keep_vs_default": 1.0989010989010985
+        }
+      }
+    },
+    {
+      "n": 500,
+      "n_splits": 20,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.002219999999999994,
+          "se": 0.008400283544997968,
+          "leak": false,
+          "keep_vs_default": 1.0109890109890107
+        },
+        "pct1_after": {
+          "optimism": -0.002999999999999987,
+          "se": 0.008469052395920603,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.012879999999999987,
+          "se": 0.008848686257566627,
+          "leak": false,
+          "keep_vs_default": 0.9685668016194332
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.09972000000000004,
+          "se": 0.008301150948555693,
+          "leak": true,
+          "keep_vs_default": 1.0989010989010985
+        }
+      }
+    },
+    {
+      "n": 1500,
+      "n_splits": 5,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": 0.001453333333333331,
+          "se": 0.0038634071946295223,
+          "leak": false,
+          "keep_vs_default": 1.0103806228373706
+        },
+        "pct1_after": {
+          "optimism": 0.001160000000000004,
+          "se": 0.003930057644159912,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": 0.0010533333333333271,
+          "se": 0.0038977178853535203,
+          "leak": false,
+          "keep_vs_default": 1.0072664359861594
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.005653333333333326,
+          "se": 0.003935523900653512,
+          "leak": false,
+          "keep_vs_default": 1.0380622837370237
+        }
+      }
+    },
+    {
+      "n": 1500,
+      "n_splits": 5,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0035600000000000015,
+          "se": 0.004245721104737612,
+          "leak": false,
+          "keep_vs_default": 1.0103806228373706
+        },
+        "pct1_after": {
+          "optimism": -0.003273333333333333,
+          "se": 0.004310476835565165,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.0034933333333333357,
+          "se": 0.004312028643379396,
+          "leak": false,
+          "keep_vs_default": 0.990560553633218
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.00198,
+          "se": 0.00412095959317422,
+          "leak": false,
+          "keep_vs_default": 1.0380622837370237
+        }
+      }
+    },
+    {
+      "n": 1500,
+      "n_splits": 10,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.0007266666666666693,
+          "se": 0.00384917785324392,
+          "leak": false,
+          "keep_vs_default": 1.0103806228373706
+        },
+        "pct1_after": {
+          "optimism": 0.00016666666666666718,
+          "se": 0.0038298534929913164,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.0005466666666666714,
+          "se": 0.003825654789431638,
+          "leak": false,
+          "keep_vs_default": 1.0072664359861594
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.008113333333333344,
+          "se": 0.0037611762971239667,
+          "leak": true,
+          "keep_vs_default": 1.0380622837370237
+        }
+      }
+    },
+    {
+      "n": 1500,
+      "n_splits": 10,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.003053333333333328,
+          "se": 0.0044946875238607254,
+          "leak": false,
+          "keep_vs_default": 1.0103806228373706
+        },
+        "pct1_after": {
+          "optimism": -0.0034933333333333327,
+          "se": 0.004575120538972492,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.0032933333333333304,
+          "se": 0.004499814885829638,
+          "leak": false,
+          "keep_vs_default": 0.990560553633218
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.006880000000000008,
+          "se": 0.004446462975965616,
+          "leak": false,
+          "keep_vs_default": 1.0380622837370237
+        }
+      }
+    },
+    {
+      "n": 1500,
+      "n_splits": 20,
+      "shock_phi": 0.0,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.00011999999999999622,
+          "se": 0.004025701715048069,
+          "leak": false,
+          "keep_vs_default": 1.0103806228373706
+        },
+        "pct1_after": {
+          "optimism": -0.0002200000000000013,
+          "se": 0.004034765363388334,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.0001866666666666672,
+          "se": 0.004005048217355761,
+          "leak": false,
+          "keep_vs_default": 1.0072664359861594
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.014006666666666666,
+          "se": 0.004005613289206929,
+          "leak": true,
+          "keep_vs_default": 1.0380622837370237
+        }
+      }
+    },
+    {
+      "n": 1500,
+      "n_splits": 20,
+      "shock_phi": 0.9,
+      "arms": {
+        "purge_only": {
+          "optimism": -0.004213333333333329,
+          "se": 0.00458475373154329,
+          "leak": false,
+          "keep_vs_default": 1.0103806228373706
+        },
+        "pct1_after": {
+          "optimism": -0.0042999999999999905,
+          "se": 0.004719540533858092,
+          "leak": false,
+          "keep_vs_default": 1.0
+        },
+        "acf_both": {
+          "optimism": -0.005139999999999983,
+          "se": 0.004582808797655628,
+          "leak": false,
+          "keep_vs_default": 0.9905736659989073
+        },
+        "contiguous_no_purge": {
+          "optimism": 0.018646666666666672,
+          "se": 0.00445803432396724,
+          "leak": true,
+          "keep_vs_default": 1.0380622837370237
+        }
+      }
+    }
+  ],
+  "call": {
+    "control_leaks": 7,
+    "n_cells": 12,
+    "testable": true,
+    "default_fails_many_folds": 0,
+    "n_many_fold_cells": 8,
+    "default_holds": true,
+    "candidate_leak_free_many_folds": true,
+    "candidate_min_keep": 0.9664615384615384,
+    "recommend_candidate": false
+  }
+}
