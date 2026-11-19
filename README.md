@@ -528,6 +528,42 @@ Reading:
 - 2-s.e. tests in 4 cells with no multiplicity correction. The purged k-NN cells are close enough to the line that a
   re-run on other seeds could flip one of them.
 
+## Slice 11 (2026-11-20): the logistic leak at n 1500 is measured, and it is about 4x smaller than at n 500
+
+Slice 10 measured a logistic leak at n 500. At n 1500 the leak was still only bounded (slice 9: +0.019, s.e. 0.011,
+60 seeds). This slice measures it, with logistic only, shock phi 0 and 0.9, 20 folds, and 480 fresh seeds
+(9400-9879), eight times slice 9's. The protocol was frozen in `purged_cv/logistic_n1500.py` before any score of the
+grid: the leak counts as **measured** iff the control leaks in ≥ 1 cell, and the default **holds** iff it is then
+leak-free in both. The expectation written before the run was a leak at phi 0.9 only (about +0.015), the default
+holding, and the leak shrinking with n.
+
+Run: `python scripts/run_logistic_n1500.py` (~6 min, 8 cores); `artifacts/logistic_n1500.{json,md}` (per-seed scores
+included). Cells are CV accuracy - 0.5 (s.e.); `*` = more than 2 s.e. above zero.
+
+| shock phi | purge only | 1% after (default) | no purge (control) | slice 10 control (n 500) |
+| ---: | :--- | :--- | :--- | ---: |
+| 0.0 | +0.0001 (0.0028) | +0.0002 (0.0027) | +0.0073 (0.0028)* | +0.0279 |
+| 0.9 | +0.0010 (0.0036) | +0.0004 (0.0036) | +0.0128 (0.0035)* | +0.0541 |
+
+**Calls.** The control leaks in 2 of 2 cells, so the leak is measured: +0.0073 (s.e. 0.0028)
+at phi 0 and +0.0128 (s.e. 0.0035) at phi 0.9. Purge only and the 1% default are leak-free in both cells
+(|optimism| ≤ 0.0010). **The default holds at n 1500.** The expectation was wrong at phi 0, which leaks too, at
+2.6 s.e.
+
+### Post-hoc reading (decides nothing; `logistic_n1500.leak_scaling`)
+
+From n 500 to n 1500, the control leak falls 3.8x (phi 0) and 4.2x (phi 0.9).
+As a power law in n, the exponents are 1.23 ± 0.40 and 1.31 ± 0.28.
+Both are above 1 but within 2 s.e. of it. Leak ~ 1/n is what a fixed-width boundary band predicts: the rows whose
+labels overlap the test fold are a fixed number per fold, so their share falls as 1/n. The data cannot tell 1/n
+from a slightly faster fall.
+
+### Weaknesses of this slice
+
+- Logistic only. The k-NN and forest leaks at n 1500 come from slices 8-9 on other seeds.
+- Two 2-s.e. tests per arm with no multiplicity correction. The phi-0 control leak (2.6 s.e.) is the closest call.
+- Still one feature process (3 AR(1) features, phi 0.98, horizon 20).
+
 ## How to run
 
 ```bash
@@ -548,6 +584,7 @@ python scripts/run_fold_count_calibration.py           # slice 8 many folds / sh
 python scripts/run_edge_cost.py                        # slice 8b embargo cost on a real edge (~20 s, 8 cores)
 python scripts/run_learner_calibration.py              # slice 9 logistic / k-NN / forest leak check (~6 min, 8 cores)
 python scripts/run_logistic_power.py                   # slice 10 logistic leak at n 500 / 20 folds / 240 seeds (~5 min, 8 cores)
+python scripts/run_logistic_n1500.py                   # slice 11 logistic leak at n 1500 / 480 seeds (~6 min, 8 cores)
 # optional market data (network; cite Yahoo Finance / yfinance):
 python scripts/run_purged_cv_slice.py --yfinance --ticker SPY
 ```
