@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text()
-SECTION = README[README.index("## Slice 12 (2026-11-20)"): README.index("## How to run")]
+SECTION = README[README.index("## Slice 12 (2026-11-20)"): README.index("## Slice 13 (2026-11-20)")]
 A = json.loads((ROOT / "artifacts" / "knn_residual.json").read_text())
 B = json.loads((ROOT / "artifacts" / "logistic_power.json").read_text())
 CELLS = {c["shock_phi"]: c["arms"] for c in A["cells"]}
