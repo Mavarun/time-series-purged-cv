@@ -602,6 +602,43 @@ Reading:
   correction over the two cells (2.28 s.e.) would not change the call.
 - Still one feature process (3 AR(1) features, phi 0.98, horizon 20).
 
+## Slice 13 (2026-11-20): slice 12's k-NN residual does not reappear on fresh seeds
+
+Slice 13 was meant to test whether the two-sided ACF embargo (`acf_both`) removes slice 12's residual. The protocol
+(frozen in `purged_cv/acf_residual.py`) first required that residual to reappear: in the same cell (k-NN, n 500,
+20 folds, shock phi 0.9), on 480 fresh seeds (10400-10879), both the control and the default had to leak. The
+candidate would then remove it iff it was leak-free **and** its paired drop from the default was > 2 s.e., using
+>= 90% of the default's training rows. The smoke run used seeds 99990-99991, outside the evaluation range.
+
+Run: `python scripts/run_acf_residual.py` (~30 s, 8 cores); `artifacts/acf_residual.{json,md}`.
+
+| arm | optimism | mean train rows |
+| :--- | :--- | ---: |
+| purge_only | +0.0018 (0.0041) | 8740 |
+| pct1_after | -0.0005 (0.0041) | 8645 |
+| acf_both | -0.0109 (0.0041) | 8393 |
+| contiguous_no_purge | +0.0904 (0.0037)* | 9500 |
+
+**Calls.** The control still leaks (+0.090), but the default does not: -0.0005 (s.e. 0.0041). **Slice 12's
+residual is not reproduced**, so, as pre-stated, no call is made on `acf_both`. A test scores a slice 12 seed with
+both modules and gets identical numbers, so the difference is not in the code. The package default does not change.
+
+Reading:
+
+- `acf_both` reads -0.0109 (s.e. 0.0041), 2.6 s.e. **below** zero: on this null it is pessimistic, not neutral. Its
+  paired drop from the default is +0.0104 (s.e. 0.0016) at 97% of the default's training rows. The expectation
+  (leak-free, drop under 2 s.e.) was wrong on the drop.
+- Post hoc (`purged_cv/residual_pool.py`, not pre-stated): the default cell pooled over slices 10, 12 and 13 (1200
+  disjoint seeds) is +0.0054 (s.e. 0.0026), z 2.05. Cochran's Q gives p 0.14, and slices 12 and 13 differ by
+  1.96 s.e. A residual of about half a point is plausible but not established; +0.011 (mean + 2 s.e.) bounds it.
+- Slice 12's "the residual is real" was the pre-stated call on its own seeds, and it stays in the record. It did not
+  replicate, and it was one of many 2-s.e. tests run across slices 7-12.
+
+### Weaknesses of this slice
+
+- One cell. The pooled estimate sits on the 2-s.e. line, so another 480 seeds could move it either way.
+- The pessimism of `acf_both` was measured on a null only. On a real edge, slice 8b put its cost at up to 0.011.
+
 ## How to run
 
 ```bash
@@ -624,6 +661,7 @@ python scripts/run_learner_calibration.py              # slice 9 logistic / k-NN
 python scripts/run_logistic_power.py                   # slice 10 logistic leak at n 500 / 20 folds / 240 seeds (~5 min, 8 cores)
 python scripts/run_logistic_n1500.py                   # slice 11 logistic leak at n 1500 / 480 seeds (~6 min, 8 cores)
 python scripts/run_knn_residual.py                     # slice 12 purged k-NN residual at n 500 / 20 folds / 480 seeds (~5 min, 8 cores)
+python scripts/run_acf_residual.py                     # slice 13 replication + two-sided ACF embargo, one cell / 480 seeds (~30 s, 8 cores)
 # optional market data (network; cite Yahoo Finance / yfinance):
 python scripts/run_purged_cv_slice.py --yfinance --ticker SPY
 ```
@@ -661,7 +699,7 @@ tests/
 ## Limits / what is still weak
 
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
-- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Slice 9 found the same for a random forest; logistic regression was not testable there (its no-purge control never leaked at n 1500), but at n 500 / 20 folds / 240 seeds its control leaks (+0.028 / +0.054) and purging removes it (slice 10). With 480 seeds, the purged k-NN at n 500 / 20 folds still leaks +0.011 (s.e. 0.0042) at shock phi 0.9 (slice 12), so the default is not leak-free at 25-row test folds. Only one feature process was tested.
+- Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Slice 9 found the same for a random forest; logistic regression was not testable there (its no-purge control never leaked at n 1500), but at n 500 / 20 folds / 240 seeds its control leaks (+0.028 / +0.054) and purging removes it (slice 10). With 480 seeds, the purged k-NN at n 500 / 20 folds leaked +0.011 (s.e. 0.0042) at shock phi 0.9 (slice 12), but 480 fresh seeds gave -0.0005 (slice 13). Pooled over 1200 seeds it is +0.0054 (s.e. 0.0026), post hoc, so a residual of about half a point at 25-row test folds is plausible but not established. Only one feature process was tested.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
 - Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
