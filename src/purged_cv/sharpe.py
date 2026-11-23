@@ -136,6 +136,31 @@ def effective_trials_participation(trial_returns: np.ndarray) -> float:
     return float(lam.sum() ** 2 / np.sum(lam**2))
 
 
+MIRROR_CORR = -0.9
+
+
+def effective_trials_signed(trial_returns: np.ndarray, mirror_corr: float = MIRROR_CORR) -> float:
+    """Participation ratio corrected for mirrored trials (slice 14).
+
+    A trial and its near-mirror (correlation below ``mirror_corr``) span one direction, but the
+    best of the pair is ``|x|``, which is distributed like the max of *two* draws. So each
+    direction that carries a mirror counts twice::
+
+        N_signed = PR(C) * (1 + m / N),   capped at N,
+
+    where ``m`` is the number of columns with at least one partner below ``mirror_corr``. With no
+    mirrors this is the participation ratio; on a grid made only of exact mirror pairs it is
+    ``2 * PR``.
+    """
+    C = trial_correlation(trial_returns)
+    N = C.shape[0]
+    pr = effective_trials_participation(trial_returns)
+    off = C.copy()
+    np.fill_diagonal(off, 0.0)
+    m = int((off < mirror_corr).any(axis=1).sum())
+    return float(min(pr * (1.0 + m / N), N))
+
+
 def null_max_sharpe_draws(
     trial_returns: np.ndarray,
     trials_sr_variance: float | None = None,
@@ -239,6 +264,8 @@ def deflated_sharpe_for_selection(
     * ``"participation"``: eigenvalue participation ratio of the trial
       correlation. Counts directions, so it is anti-conservative on mirrored
       grids (see :func:`effective_trials_participation`).
+    * ``"participation_signed"``: the participation ratio with each mirrored direction
+      counted twice (:func:`effective_trials_signed`, slice 14).
     * ``"simulated"``: E[max SR] is the mean of
       :func:`null_max_sharpe_draws` (zero-skill Sharpes with the grid's own
       correlation, scaled by the chosen variance); the reported N is the
@@ -267,11 +294,14 @@ def deflated_sharpe_for_selection(
     elif n_trials_mode == "participation":
         n_eff = effective_trials_participation(M)
         sr0 = _expected_max_sharpe_continuous(n_eff, var_sr) if n_eff > 1.0 + 1e-9 else 0.0
+    elif n_trials_mode == "participation_signed":
+        n_eff = effective_trials_signed(M)
+        sr0 = _expected_max_sharpe_continuous(n_eff, var_sr) if n_eff > 1.0 + 1e-9 else 0.0
     elif n_trials_mode == "simulated":
         sr0 = float(null_max_sharpe_draws(M, var_sr, n_sims=n_sims, seed=seed).mean())
         n_eff = implied_effective_trials(sr0, var_sr) if var_sr > 0 else 1.0
     else:
-        raise ValueError("n_trials_mode must be 'raw', 'participation' or 'simulated'")
+        raise ValueError("n_trials_mode must be 'raw', 'participation', 'participation_signed' or 'simulated'")
     return SelectionReport(
         best_index=b,
         n_trials=M.shape[1],
