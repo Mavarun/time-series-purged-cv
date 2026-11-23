@@ -639,6 +639,67 @@ Reading:
 - One cell. The pooled estimate sits on the 2-s.e. line, so another 480 seeds could move it either way.
 - The pessimism of `acf_both` was measured on a null only. On a real edge, slice 8b put its cost at up to 0.011.
 
+## Slice 14 (2026-11-24): a mirror-aware trial count fixes the liberal DSR, but costs too much power
+
+Slice 6 found the participation-N DSR the only hurdle above 7% on short nulls. The default grid holds every rule in
+both directions; the participation ratio counts a rule and its mirror as one direction, but `max(x, -x)` is a
+two-draw max. `effective_trials_signed` (`n_trials_mode="participation_signed"`) counts each mirrored direction
+twice (`N = PR * (1 + m / N_rules)`, capped at the rule count; `m` = rules with a partner below correlation -0.9).
+Protocol frozen in `purged_cv/signed_dsr_calibration.py` before any evaluation score: slice 6's setup (40 rules,
+2 bps, null Sharpe variance) at n {252, 504, 1260} x {normal, GARCH-t, vol regime} x phi {0, 0.1}, 300 fresh
+seeds (11000-11299). **H1:** signed null rate <= 0.063 in all 6 null cells with n <= 504. **H2:** signed power within
+0.03 of the max-statistic test in >= 6 of 9 phi 0.1 cells. Recommend it only if both pass; the package default
+(`raw`) does not change. Expectation: H1 passes, H2 fails. A dev check on seeds 0-99 was the only score seen.
+
+Run: `python scripts/run_signed_dsr_calibration.py` (~4 min, 8 cores); `artifacts/signed_dsr_calibration.{json,md}`.
+
+False positives (`phi = 0`):
+
+| returns | bars | DSR participation | DSR signed | DSR simulated | max-stat p<0.05 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| normal | 252 | 0.073 | 0.013 | 0.000 | 0.047 |
+| normal | 504 | 0.057 | 0.010 | 0.003 | 0.037 |
+| normal | 1260 | 0.040 | 0.010 | 0.003 | 0.023 |
+| GARCH-t | 252 | 0.097 | 0.023 | 0.007 | 0.030 |
+| GARCH-t | 504 | 0.077 | 0.023 | 0.010 | 0.030 |
+| GARCH-t | 1260 | 0.040 | 0.013 | 0.003 | 0.020 |
+| vol regime | 252 | 0.097 | 0.027 | 0.000 | 0.040 |
+| vol regime | 504 | 0.063 | 0.017 | 0.003 | 0.040 |
+| vol regime | 1260 | 0.060 | 0.010 | 0.007 | 0.017 |
+
+Power (`phi = 0.1`):
+
+| returns | bars | DSR participation | DSR signed | DSR simulated | max-stat p<0.05 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| normal | 252 | 0.193 | 0.067 | 0.020 | 0.123 |
+| normal | 504 | 0.240 | 0.127 | 0.043 | 0.177 |
+| normal | 1260 | 0.463 | 0.323 | 0.190 | 0.407 |
+| GARCH-t | 252 | 0.190 | 0.083 | 0.027 | 0.093 |
+| GARCH-t | 504 | 0.247 | 0.120 | 0.047 | 0.173 |
+| GARCH-t | 1260 | 0.417 | 0.240 | 0.133 | 0.320 |
+| vol regime | 252 | 0.183 | 0.067 | 0.017 | 0.103 |
+| vol regime | 504 | 0.197 | 0.093 | 0.033 | 0.130 |
+| vol regime | 1260 | 0.377 | 0.237 | 0.123 | 0.313 |
+
+**Calls.** H1 passes (signed null 1.0-2.7% in every cell). H2 fails: the signed DSR is within 0.03 of the
+max-statistic test in only 1 of 9 power cells (252 bars normal: 0.067 vs 0.123). So `participation_signed` is
+**not recommended**; it stays an option and the default is unchanged. The expectation held.
+
+Reading:
+
+- The mirror explanation fits: doubling N (4.4 -> 8.8 on normal returns) takes the plain participation DSR's
+  5.7-9.7% short-sample (n <= 504) nulls, which reproduce slice 6 on fresh seeds, down to 1.0-2.7%.
+- It overshoots. The signed DSR is stricter than the max-statistic test on every null and power cell, and the
+  max-statistic test already holds its null (1.7-4.7%). The correction is a rough count; the simulated null, which
+  keeps the grid's exact correlation, is more conservative still. The max-statistic test stays the recommended
+  hurdle for this grid.
+
+### Weaknesses of this slice
+
+- One grid, in which every rule has an exact-sign mirror. The `(1 + m / N)` rule is a heuristic count, not a derived
+  expected maximum; grids with partial mirrors are untested.
+- 300 seeds give +-1.3 points of s.e. on a 5% rate, so single-cell gaps of 0.01-0.02 are noise.
+
 ## How to run
 
 ```bash
@@ -701,7 +762,7 @@ tests/
 - Single linear return-sign model in the original slice; no hyperparameter search or portfolio construction. Selection diagnostics now include linear bps plus an optional square-root impact term.
 - Embargo length defaults to a fraction of the sample span; a label-ACF length and a two-sided embargo are options (slice 7). On the slice 7-8 nulls purging alone removed every measurable leak up to 20 folds at n = 500, and the two-sided ACF embargo cost up to 0.011 CV accuracy on a real edge (slice 8), so it stays opt-in. Slice 9 found the same for a random forest; logistic regression was not testable there (its no-purge control never leaked at n 1500), but at n 500 / 20 folds / 240 seeds its control leaks (+0.028 / +0.054) and purging removes it (slice 10). With 480 seeds, the purged k-NN at n 500 / 20 folds leaked +0.011 (s.e. 0.0042) at shock phi 0.9 (slice 12), but 480 fresh seeds gave -0.0005 (slice 13). Pooled over 1200 seeds it is +0.0054 (s.e. 0.0026), post hoc, so a residual of about half a point at 25-row test folds is plausible but not established. Only one feature process was tested.
 - Average-uniqueness weights use a coarse discrete grid (research-grade, not a production event-time engine).
-- Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years.
+- Hurdle calibration covers iid-normal, GARCH(1,1)-t and two-state volatility-regime AR(1) returns at n = 252-2520 (slice 6). Regime-dependent autocorrelation, walk-forward selection at short n and real return panels are untested; the participation-N DSR runs liberal (7-10% null) at one to two years; slice 14 traced that to mirrored rules, and a mirror-aware count fixes the null (1-3%) but costs more power than the max-statistic test, so it is not recommended.
 - Synthetic AR(1) is a citation-clear null-ish demo; yfinance path needs network and is still not a trading signal.
 - Gap on honest lag features is small; the large gap is easiest to see on the engineered-leakage fixture.
 - No claim of production accuracy or live PnL.
